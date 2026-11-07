@@ -1,6 +1,6 @@
 import { Bookmark, Check, Plus, Star, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useTranslation } from "@/i18n";
+import { cn } from "@/lib/utils";
 
 /**
  * A filter preset captures the URL segment / status, optional date range, and
@@ -170,8 +171,8 @@ export function SavedFiltersMenu({ storageKey, current, onApply }: Props) {
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-input bg-background hover:bg-accent text-sm font-medium transition-colors">
-          <Bookmark className="h-3.5 w-3.5" />
+        <DropdownMenuTrigger className={cn(buttonVariants({ variant: "outline" }))}>
+          <Bookmark />
           {t("saved_filters.button")}
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64">

@@ -132,7 +132,7 @@ export function DateRangeFilter({ value, onChange }: DateRangeFilterProps) {
   return (
     <div className="flex items-center gap-2">
       <Select value={preset} onValueChange={(v) => v && handlePreset(v)}>
-        <SelectTrigger size="sm" className="gap-1.5">
+        <SelectTrigger className="gap-1.5">
           <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
           <SelectValue placeholder={t("date_range.placeholder")}>{selectedLabel}</SelectValue>
         </SelectTrigger>

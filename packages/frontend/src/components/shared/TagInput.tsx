@@ -61,8 +61,8 @@ export function TagInput({
     <div className={cn("w-full", className)}>
       <div
         className={cn(
-          "flex min-h-9 flex-wrap items-center gap-1.5 rounded-md border border-input bg-transparent px-2 py-1.5 transition-colors",
-          focused && "ring-2 ring-ring ring-offset-1",
+          "flex min-h-8 flex-wrap items-center gap-1.5 rounded-lg border border-input bg-transparent px-2.5 py-0.5 transition-colors",
+          focused && "border-ring ring-3 ring-ring/50",
           disabled && "opacity-50 cursor-not-allowed",
         )}
       >
@@ -91,7 +91,7 @@ export function TagInput({
           disabled={disabled}
           aria-label={ariaLabel}
           placeholder={value.length === 0 ? placeholder : ""}
-          className="h-7 min-w-[8rem] flex-1 border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
+          className="h-6 min-w-[8rem] flex-1 border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
           onFocus={() => setFocused(true)}
           onBlur={() => {
             setFocused(false);

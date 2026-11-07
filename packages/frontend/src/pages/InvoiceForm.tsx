@@ -753,7 +753,7 @@ export default function InvoiceForm({ onSave }: Props) {
   };
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className="max-w-4xl space-y-6" noValidate>
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6" noValidate>
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-2">
         <div>
           <Breadcrumbs
