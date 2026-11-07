@@ -1,0 +1,81 @@
+# Nightly encrypted backup of the Inkvoice database to a Synology NAS (NFS).
+#
+#  1. `snapshot` takes a consistent copy of the live SQLite database
+#     (VACUUM INTO, safe while the app is running) using the app's own image.
+#  2. `restic` encrypts that copy into a restic repository on the NAS and
+#     prunes old snapshots: 7 daily, 4 weekly, 6 monthly.
+#
+# Setup and restore steps: deploy/k3s/backup/README.md
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: inkvoice-backup
+spec:
+  schedule: "30 2 * * *" # every night at 02:30 (cluster time zone)
+  timeZone: Pacific/Auckland
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          initContainers:
+            - name: snapshot
+              image: ghcr.io/heyronmar/inkvoice:latest
+              command:
+                - bun
+                - -e
+                - |
+                  const { Database } = require("bun:sqlite");
+                  const db = new Database("/app/data/invoice.db");
+                  db.run("VACUUM INTO '/snapshot/invoice.db'");
+                  db.close();
+                  const check = new Database("/snapshot/invoice.db", { readonly: true });
+                  const result = check.query("PRAGMA integrity_check").get();
+                  if (result.integrity_check !== "ok") throw new Error("snapshot failed integrity check");
+                  console.log("snapshot ok");
+              volumeMounts:
+                - name: data
+                  mountPath: /app/data
+                - name: snapshot
+                  mountPath: /snapshot
+          containers:
+            - name: restic
+              image: restic/restic:0.17.3
+              command:
+                - sh
+                - -ec
+                - |
+                  restic cat config >/dev/null 2>&1 || restic init
+                  restic backup --host inkvoice --tag nightly /snapshot/invoice.db
+                  restic forget --host inkvoice --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
+                  restic check
+              env:
+                - name: RESTIC_REPOSITORY
+                  value: /repo/inkvoice
+                - name: RESTIC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: inkvoice-backup
+                      key: RESTIC_PASSWORD
+              volumeMounts:
+                - name: snapshot
+                  mountPath: /snapshot
+                  readOnly: true
+                - name: nas
+                  mountPath: /repo
+          volumes:
+            # Same volume the app uses. It is ReadWriteOnce, so Kubernetes
+            # schedules this job on the node that holds the data.
+            - name: data
+              persistentVolumeClaim:
+                claimName: inkvoice-data
+            - name: snapshot
+              emptyDir: {}
+            - name: nas
+              nfs:
+                server: 192.168.1.50 # <-- your Synology's IP address
+                path: /volume1/inkvoice-backups # <-- your shared folder
