@@ -1,0 +1,101 @@
+# Inkvoice in one file, for pasting into Portainer ("Create from manifest").
+#
+# Opens on your home network at http://<any-k3s-machine-ip>:30080
+# No domain or HTTPS needed. For a domain + HTTPS, use the files in
+# deploy/k3s/ instead (Ingress).
+#
+# Before pasting: create the Secret "inkvoice" with the keys JWT_SECRET and
+# ADMIN_PASS (see deploy/k3s/PORTAINER.md).
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: inkvoice-data
+  namespace: default
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inkvoice
+  namespace: default
+  labels:
+    app: inkvoice
+spec:
+  # Always exactly one: the database is a single file.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: inkvoice
+  template:
+    metadata:
+      labels:
+        app: inkvoice
+    spec:
+      # Uncomment to make sure it runs on the SenseCAP (use its node name):
+      # nodeSelector:
+      #   kubernetes.io/hostname: sensecap
+      containers:
+        - name: inkvoice
+          image: ghcr.io/heyronmar/inkvoice:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: inkvoice
+          env:
+            - name: ADMIN_USER
+              value: admin
+            - name: DATABASE_PATH
+              value: /app/data/invoice.db
+            # Plain http on the home network; set "true" once behind HTTPS.
+            - name: COOKIE_SECURE
+              value: "false"
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: inkvoice-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inkvoice
+  namespace: default
+spec:
+  type: NodePort
+  selector:
+    app: inkvoice
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      nodePort: 30080
