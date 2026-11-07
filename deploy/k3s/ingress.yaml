@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: inkvoice
+  # Works with k3s's bundled Traefik as is. Add your TLS setup here,
+  # e.g. a cert-manager annotation plus the `tls` block below.
+spec:
+  rules:
+    - host: invoices.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: inkvoice
+                port:
+                  name: http
+  # tls:
+  #   - hosts: [invoices.example.com]
+  #     secretName: inkvoice-tls

@@ -31,7 +31,7 @@ A self-hostable alternative to FreshBooks, Wave, Zoho Invoice & Invoice Ninja.
 Inkvoice is a lightweight, **self-hosted** invoicing dashboard for people who'd rather own their billing than rent it. Send professional invoices, get paid online, keep an eye on expenses, and hand clean numbers to your accountant — without per-seat pricing or data lock-in.
 
 - 🗄️ **Own your data** — everything lives in a single SQLite file you control.
-- 📦 **One container, runs anywhere** — Docker, [Coolify](https://coolify.io), or [one-click on Dokploy](https://dokploy.com/templates/inkvoice); ~50–100&nbsp;MB RAM.
+- 📦 **One container, runs anywhere** — Docker, Kubernetes ([k3s manifests](./deploy/k3s)), [Coolify](https://coolify.io), or [one-click on Dokploy](https://dokploy.com/templates/inkvoice); ~50–100&nbsp;MB RAM.
 - ⚡ **Modern & fast** — Bun + Hono + React, no heavyweight runtime.
 - 🌍 **Multi-currency, multi-user, multi-language** out of the box.
 - ☁️ **Don't want to self-host?** Use the managed **[Inkvoice Cloud](https://cloud.inkvoice.app)** and skip the ops.

@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inkvoice
+  labels:
+    app: inkvoice
+spec:
+  # Exactly one replica: the database is a SQLite file and the scheduler
+  # (recurring invoices, reminders, auto-bill) runs in-process. Recreate
+  # stops the old pod before the new one opens the same database.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: inkvoice
+  template:
+    metadata:
+      labels:
+        app: inkvoice
+    spec:
+      containers:
+        - name: inkvoice
+          # Pin a release tag so a pod restart never silently upgrades.
+          image: ghcr.io/pigontech/inkvoice:0.3.3
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: inkvoice
+          env:
+            - name: ADMIN_USER
+              value: admin
+            - name: DATABASE_PATH
+              value: /app/data/invoice.db
+            # "true" when the Ingress serves HTTPS, "false" for plain HTTP.
+            - name: COOKIE_SECURE
+              value: "true"
+            # Public URL used in emailed payment links.
+            - name: PUBLIC_BASE_URL
+              value: https://invoices.example.com
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              # Bun sizes its heap to the memory it can see, so keep a cap.
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: inkvoice-data
