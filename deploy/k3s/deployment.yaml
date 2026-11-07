@@ -21,8 +21,10 @@ spec:
     spec:
       containers:
         - name: inkvoice
-          # Pin a release tag so a pod restart never silently upgrades.
-          image: ghcr.io/pigontech/inkvoice:0.3.3
+          # This fork's own image, rebuilt automatically on every push to main.
+          # A pod restart pulls the newest build.
+          image: ghcr.io/heyronmar/inkvoice:latest
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 3000
