@@ -12,6 +12,7 @@ import { installPluginNavGate } from "./install-nav-gate";
 import { PluginsSettingsTab } from "./PluginsSettingsTab";
 
 // Official plugins, each registering its surface on import.
+import "./leads";
 import "./time-tracker";
 
 installPluginNavGate();
