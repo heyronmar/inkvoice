@@ -393,6 +393,9 @@ const tr: TranslationKeys = {
     default_currency: "Varsayılan Para Birimi",
     default_currency_hint: "Bu müşteri için yeni faturalarda para birimini önceden doldurur",
     default_currency_inherit: "İşletme varsayılanı",
+    type: "Tür",
+    type_company: "Şirket",
+    type_individual: "Bireysel",
     einvoice_section: "E-fatura",
     einvoice_format: "E-fatura formatı",
     einvoice_format_hint:

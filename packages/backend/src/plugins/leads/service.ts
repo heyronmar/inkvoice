@@ -176,6 +176,7 @@ export function convertLead(id: string): { lead: Lead; customer_id: string } | n
   const contact = lead.company ? `Contact: ${lead.name}` : "";
   const customer = createCustomer({
     name: lead.company || lead.name,
+    customer_type: lead.company ? "company" : "individual",
     email: lead.email ?? "",
     phone: lead.phone ?? "",
     notes: [contact, lead.notes ?? ""].filter(Boolean).join("\n"),

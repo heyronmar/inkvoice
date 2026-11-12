@@ -1233,6 +1233,20 @@ export function setMigrationBackupsEnabled(enabled: boolean): void {
 }
 
 export function runMigrations(): void {
+  runVersionedMigrations();
+  runLocalColumns();
+}
+
+// Columns this fork adds on top of upstream. They are idempotent and kept out
+// of the numbered MIGRATIONS list, so a future upstream migration with the next
+// version number is never mistaken for one already applied here.
+function runLocalColumns(): void {
+  const db = getDb();
+  // "company" or "individual"; existing customers count as companies.
+  addColumnIfMissing(db, "customers", "customer_type", "TEXT NOT NULL DEFAULT 'company'");
+}
+
+function runVersionedMigrations(): void {
   if (migrationBackupsEnabled) {
     backupDatabase();
   }

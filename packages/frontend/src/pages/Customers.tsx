@@ -1,4 +1,14 @@
-import { Download, Pencil, Plus, Search, Trash2, Upload, Users } from "lucide-react";
+import {
+  Building2,
+  Download,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  Upload,
+  User,
+  Users,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -323,7 +333,24 @@ export default function Customers() {
                     />
                   </TableCell>
                 )}
-                {isColVisible("name") && <TableCell className="font-medium">{c.name}</TableCell>}
+                {isColVisible("name") && (
+                  <TableCell className="font-medium">
+                    <span className="inline-flex items-center gap-2">
+                      {c.customer_type === "individual" ? (
+                        <User
+                          className="h-4 w-4 shrink-0 text-muted-foreground"
+                          aria-label={t("customers.type_individual")}
+                        />
+                      ) : (
+                        <Building2
+                          className="h-4 w-4 shrink-0 text-muted-foreground"
+                          aria-label={t("customers.type_company")}
+                        />
+                      )}
+                      {c.name}
+                    </span>
+                  </TableCell>
+                )}
                 {isColVisible("email") && (
                   <TableCell className="text-muted-foreground">{c.email || "-"}</TableCell>
                 )}

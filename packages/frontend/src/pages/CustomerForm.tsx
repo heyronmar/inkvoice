@@ -1,4 +1,14 @@
-import { Clock, Copy, DollarSign, FileText, Loader2, Save, SearchCheck } from "lucide-react";
+import {
+  Building2,
+  Clock,
+  Copy,
+  DollarSign,
+  FileText,
+  Loader2,
+  Save,
+  SearchCheck,
+  User,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -88,6 +98,7 @@ export default function CustomerForm({ onSave }: Props) {
     }
   }
   const [form, setForm] = useState({
+    customer_type: "company" as "company" | "individual",
     name: navState?.prefillName ?? "",
     email: "",
     phone: "",
@@ -136,6 +147,7 @@ export default function CustomerForm({ onSave }: Props) {
       api.getCustomer(id).then((r) => {
         const d = r.data;
         setForm({
+          customer_type: d.customer_type === "individual" ? "individual" : "company",
           name: d.name || "",
           email: d.email || "",
           phone: d.phone || "",
@@ -260,6 +272,30 @@ export default function CustomerForm({ onSave }: Props) {
               <CardTitle className="text-sm">{t("customers.contact_info")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <FormField label={t("customers.type")}>
+                <div className="inline-flex h-8 w-fit items-center gap-0.5 rounded-lg border p-0.5">
+                  {(
+                    [
+                      ["company", Building2, t("customers.type_company")],
+                      ["individual", User, t("customers.type_individual")],
+                    ] as const
+                  ).map(([value, Icon, label]) => (
+                    <Button
+                      key={value}
+                      type="button"
+                      size="sm"
+                      variant={form.customer_type === value ? "secondary" : "ghost"}
+                      className="h-full"
+                      aria-pressed={form.customer_type === value}
+                      onClick={() => setForm({ ...form, customer_type: value })}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+              </FormField>
+
               <FormField label={t("customers.name")} error={getError("name")} required>
                 <Input
                   value={form.name}

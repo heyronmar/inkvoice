@@ -398,6 +398,9 @@ const es: TranslationKeys = {
     default_currency: "Moneda predeterminada",
     default_currency_hint: "Rellena previamente la moneda en las nuevas facturas de este cliente",
     default_currency_inherit: "Predeterminada del negocio",
+    type: "Tipo",
+    type_company: "Empresa",
+    type_individual: "Particular",
     einvoice_section: "Factura electrónica (E-Rechnung)",
     einvoice_format: "Formato de factura electrónica",
     einvoice_format_hint:

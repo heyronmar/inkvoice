@@ -400,6 +400,9 @@ const fr: TranslationKeys = {
     default_currency: "Devise par défaut",
     default_currency_hint: "Pré-remplit la devise des nouvelles factures pour ce client",
     default_currency_inherit: "Valeur par défaut de l'entreprise",
+    type: "Type",
+    type_company: "Entreprise",
+    type_individual: "Particulier",
     einvoice_section: "Facture électronique (E-Rechnung)",
     einvoice_format: "Format de facture électronique",
     einvoice_format_hint:

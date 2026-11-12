@@ -410,6 +410,9 @@ const de: TranslationKeys = {
     default_currency: "Standardwährung",
     default_currency_hint: "Füllt die Währung auf neuen Rechnungen für diesen Kunden vor",
     default_currency_inherit: "Unternehmensstandard",
+    type: "Art",
+    type_company: "Unternehmen",
+    type_individual: "Privatperson",
     einvoice_section: "E-Rechnung",
     einvoice_format: "E-Rechnungsformat",
     einvoice_format_hint:

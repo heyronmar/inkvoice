@@ -172,8 +172,8 @@ export function createCustomer(data: CustomerInput): Customer & { tags: string[]
   const id = crypto.randomBytes(16).toString("hex");
 
   db.run(
-    `INSERT INTO customers (id, name, email, phone, address_line1, address_line2, city, state, postal_code, country, tax_id, tax_number, einvoice_format, leitweg_id, einvoice_receiver_id, einvoice_receiver_scheme, siren, siret, notes, language, default_template_id, currency)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO customers (id, name, email, phone, address_line1, address_line2, city, state, postal_code, country, tax_id, tax_number, einvoice_format, leitweg_id, einvoice_receiver_id, einvoice_receiver_scheme, siren, siret, notes, language, default_template_id, currency, customer_type)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       data.name!,
@@ -197,6 +197,7 @@ export function createCustomer(data: CustomerInput): Customer & { tags: string[]
       data.language || null,
       data.default_template_id || null,
       data.currency || null,
+      data.customer_type || "company",
     ],
   );
 
@@ -221,7 +222,7 @@ export function updateCustomer(
      city = ?, state = ?, postal_code = ?, country = ?, tax_id = ?, tax_number = ?,
      einvoice_format = ?, leitweg_id = ?, einvoice_receiver_id = ?, einvoice_receiver_scheme = ?,
      siren = ?, siret = ?, notes = ?, language = ?, default_template_id = ?, currency = ?,
-     updated_at = datetime('now')
+     customer_type = COALESCE(?, customer_type), updated_at = datetime('now')
      WHERE id = ?`,
     [
       data.name!,
@@ -245,6 +246,8 @@ export function updateCustomer(
       data.language || null,
       data.default_template_id || null,
       data.currency || null,
+      // Left unchanged when a client (e.g. the mobile app) doesn't send it.
+      data.customer_type || null,
       id,
     ],
   );

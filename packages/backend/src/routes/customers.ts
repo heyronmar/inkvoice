@@ -162,6 +162,7 @@ const customerSchema = z.object({
   language: z.string().max(35).optional().or(z.literal("")),
   default_template_id: z.string().max(64).optional().nullable().or(z.literal("")),
   currency: z.string().max(3).optional().or(z.literal("")),
+  customer_type: z.enum(["company", "individual"]).optional(),
   tags: z.array(z.string().trim().min(1).max(50)).max(30).optional(),
 });
 

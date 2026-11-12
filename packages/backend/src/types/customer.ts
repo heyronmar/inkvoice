@@ -1,3 +1,5 @@
+export type CustomerType = "company" | "individual";
+
 export interface Customer {
   id: string;
   name: string;
@@ -33,6 +35,8 @@ export interface Customer {
   currency: string | null;
   /** When true, the customer can view their invoices via a per-customer portal URL. */
   portal_enabled: number;
+  /** "company" or "individual". */
+  customer_type: CustomerType;
   created_at: string;
   updated_at: string;
 }

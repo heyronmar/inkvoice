@@ -391,6 +391,9 @@ const en = {
     default_currency: "Default Currency",
     default_currency_hint: "Pre-fills the currency on new invoices for this customer",
     default_currency_inherit: "Business default",
+    type: "Type",
+    type_company: "Company",
+    type_individual: "Individual",
     einvoice_section: "E-Rechnung (e-invoice)",
     einvoice_format: "E-invoice format",
     einvoice_format_hint:

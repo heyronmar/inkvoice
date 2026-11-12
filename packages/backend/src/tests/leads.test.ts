@@ -89,7 +89,14 @@ describe("leads service", () => {
     const customer = getCustomer(first.customer_id)!;
     expect(customer.name).toBe("Kowhai Ltd");
     expect(customer.notes).toContain("Contact: Mere");
+    expect(customer.customer_type).toBe("company");
     expect(convertLead(lead.id)!.customer_id).toBe(first.customer_id);
+  });
+
+  test("a lead without a company converts to an individual", () => {
+    const lead = createLead({ name: "Wiremu" });
+    const { customer_id } = convertLead(lead.id)!;
+    expect(getCustomer(customer_id)!.customer_type).toBe("individual");
   });
 
   test("a quoted lead becomes won when its customer accepts a quote", () => {
