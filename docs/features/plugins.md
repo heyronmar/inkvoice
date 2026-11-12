@@ -59,6 +59,26 @@ Track time against projects and turn unbilled hours into draft invoices.
   Requires invoice creation permission. Entries are marked billed and linked
   to the invoice.
 
+## Leads
+
+Track potential customers from first contact to a won quote. Off by default.
+
+- **Leads** hold a contact name, company, email, phone, source, estimated
+  value, stage (New, Contacted, Quoted, Won, Lost), next follow-up date and
+  notes. Open leads sort by the soonest follow-up; overdue ones are flagged.
+- **List or board**: a table with stage tabs, or a board you drag leads
+  across to change their stage.
+- **Convert to customer** creates a customer from the lead (named after the
+  company, or the contact if there is none). Converting twice reuses it.
+- **Create quote** converts the lead, moves it to Quoted and opens a new
+  quote with that customer selected. When the customer accepts a quote, the
+  lead moves to Won.
+- **Export** the filtered list as CSV.
+- Uses the existing customer permissions: reading leads needs
+  `customers:read`, exporting `customers:export`, editing
+  `customers:create`/`update`/`delete`, and
+  starting a quote also needs `invoices:create`.
+
 ## API
 
 Plugin endpoints live under `/api/v1/plugins/<plugin-id>/...` and require
