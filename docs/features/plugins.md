@@ -59,6 +59,49 @@ Track time against projects and turn unbilled hours into draft invoices.
   Requires invoice creation permission. Entries are marked billed and linked
   to the invoice.
 
+## Leads
+
+Track potential customers from first contact to a won deal. Off by default.
+
+- **Leads** hold a contact name, company, email, phone, source, estimated
+  value, stage, next follow-up date and notes. Open leads sort by the soonest
+  follow-up; overdue ones are flagged.
+- **List or board**: a table with stage tabs, or a board you drag leads
+  across to change their stage.
+- **Your own pipeline** (Settings → Plugins → Leads): up to 8 working stages
+  plus Won and Lost, which always come last. Add, rename, colour, reorder,
+  hide or remove stages; a stage can only be removed once it's empty. The
+  source list can be edited too.
+- **Stage automations** (the ⚡ button on a board column or settings row,
+  admins only). What a stage offers depends on where it sits:
+
+  | Stage | Moves leads in when | When a lead arrives |
+  |---|---|---|
+  | First | Nothing: new leads start here | Set a follow-up |
+  | Middle | One event, in pipeline order | Make a customer, set a follow-up |
+  | Won | Quote accepted, invoiced or invoice paid | Make a customer, create a Time Tracking project |
+  | Lost | Quote declined or expired | Nothing |
+
+  Events follow the deal: follow-up set → quote created → sent → accepted →
+  invoiced → paid. A stage can only use an event after every earlier
+  stage's and before every later stage's; reordering stages turns off rules
+  that no longer fit. Each event moves a lead once, when it happens, so a
+  lead moved by hand stays put, and arrival actions never move a lead, so
+  automations can't loop.
+- **Quotes**: a lead follows its first quote. Its card shows the quote
+  number and status and opens it, instead of offering another quote. The
+  lead moves when the quote is saved, not when *Create quote* is clicked.
+  If the quote is declined or expires, a newer quote for the customer takes
+  its place and brings the lead back. Quote and invoice status is read
+  lazily when leads are listed, so the core quote flow has no hooks.
+- **Convert to customer** creates a customer from the lead (named after the
+  company, or the contact if there is none). Converting twice reuses it.
+- **Export** the filtered list as CSV.
+- Uses the existing customer permissions: reading leads needs
+  `customers:read`, exporting `customers:export`, editing
+  `customers:create`/`update`/`delete`, and starting a quote also needs
+  `invoices:create`. Changing the pipeline and automations is admin only.
+
 ## API
 
 Plugin endpoints live under `/api/v1/plugins/<plugin-id>/...` and require

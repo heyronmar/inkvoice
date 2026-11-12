@@ -52,6 +52,7 @@ pluginsAdminRoutes.get("/catalog", async (c) => {
       id: p.id,
       version: p.version,
       enabled: enabled.includes(p.id),
+      listing: p.listing,
     })),
     appVersion: APP_VERSION,
     votes,

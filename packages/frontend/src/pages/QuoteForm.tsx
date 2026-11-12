@@ -17,7 +17,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Plus, Save, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { api } from "@/api/client";
 import { Breadcrumbs } from "@/components/shared/Breadcrumbs";
@@ -182,12 +182,14 @@ export default function QuoteForm() {
   const navigate = useNavigate();
   const isEdit = !!id;
   const { t } = useTranslation();
+  // A new quote can arrive with its customer chosen, e.g. from the Leads plugin.
+  const [searchParams] = useSearchParams();
 
   const [customers, setCustomers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [taxes, setTaxes] = useState<any[]>([]);
 
-  const [customerId, setCustomerId] = useState("");
+  const [customerId, setCustomerId] = useState(() => searchParams.get("customer_id") ?? "");
   const [issueDate, setIssueDate] = useState(todayIso());
   const [validUntil, setValidUntil] = useState("");
   const [currency, setCurrency] = useState("USD");

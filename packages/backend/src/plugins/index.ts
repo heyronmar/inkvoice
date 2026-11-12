@@ -2,4 +2,5 @@
 // load. app.ts imports this barrel so the registry is populated before
 // runPluginMigrations() and route mounting.
 
+import "./leads";
 import "./time-tracker";

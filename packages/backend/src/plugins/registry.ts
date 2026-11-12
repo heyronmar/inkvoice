@@ -30,6 +30,18 @@ export interface BackendPlugin {
   feature?: string;
   /** On for installs that never explicitly toggled their plugin set. */
   defaultEnabled?: boolean;
+  /** Plugins tab copy used when the public catalog has no entry for this
+   *  plugin (a fork's own plugin). Catalog copy wins when both exist. */
+  listing?: PluginListing;
+}
+
+export interface PluginListing {
+  name: string;
+  tagline: string;
+  description?: string;
+  /** Lucide icon name; must be in the frontend icon-map. */
+  icon?: string;
+  category?: string;
 }
 
 /** Ids the app mounts its own routes under, so a plugin may never claim them.

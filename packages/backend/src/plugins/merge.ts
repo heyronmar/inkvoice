@@ -7,6 +7,7 @@
 // built from registry data alone.
 
 import type { CatalogPlugin } from "./catalog.service";
+import type { PluginListing } from "./registry";
 import { gt, gte } from "./semver";
 
 /** Why there is no working enable switch. Null means the switch works. */
@@ -25,6 +26,7 @@ export interface InstalledPlugin {
   id: string;
   version: string;
   enabled: boolean;
+  listing?: PluginListing;
 }
 
 export interface MergeInput {
@@ -116,14 +118,14 @@ export function mergePlugins(input: MergeInput): MergedPlugin[] {
     return {
       id,
       // Catalog copy wins when present, so a reworded description ships without
-      // an app release. A registry-only plugin falls back to its own id.
-      name: entry?.name ?? id,
-      tagline: entry?.tagline ?? "",
-      description: entry?.description ?? "",
-      category: entry?.category ?? "other",
+      // an app release. A registry-only plugin uses its own listing, then its id.
+      name: entry?.name ?? local?.listing?.name ?? id,
+      tagline: entry?.tagline ?? local?.listing?.tagline ?? "",
+      description: entry?.description ?? local?.listing?.description ?? "",
+      category: entry?.category ?? local?.listing?.category ?? "other",
       status: entry?.status ?? "available",
       availability: entry?.availability ?? "oss",
-      icon: entry?.icon ?? "Puzzle",
+      icon: entry?.icon ?? local?.listing?.icon ?? "Puzzle",
       docs: entry?.docs ?? null,
       source: entry?.source ?? null,
       screenshots: entry?.screenshots ?? [],
