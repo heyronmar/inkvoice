@@ -8,6 +8,7 @@ import { z } from "zod";
 import { requirePermission } from "../../middleware/auth";
 import { buildCsv, csvHeaders } from "../../utils/csv";
 import { registerBackendPlugin } from "../registry";
+import { getLeadsConfig, saveLeadsConfig } from "./config";
 import { leadsMigrations } from "./migrations";
 import * as svc from "./service";
 
@@ -28,11 +29,46 @@ const leadSchema = z.object({
   company: optionalText(255),
   email: z.string().email().nullable().optional().or(z.literal("")),
   phone: optionalText(50),
-  source: z.enum(svc.LEAD_SOURCES).nullable().optional().or(z.literal("")),
+  // Built-in source keys or the business's own (see Leads settings).
+  source: optionalText(50),
   value: z.number().nonnegative().nullable().optional(),
   stage: z.enum(svc.LEAD_STAGES).optional(),
   next_follow_up: isoDate,
   notes: optionalText(5000),
+});
+
+const configSchema = z.object({
+  stages: z
+    .array(
+      z.object({
+        id: z.enum(svc.LEAD_STAGES),
+        label: z.string().max(40).nullable(),
+        hidden: z.boolean(),
+      }),
+    )
+    .max(svc.LEAD_STAGES.length),
+  sources: z.array(z.string().max(50)).max(30),
+  follow_up_days: z.number().int().min(1).max(365).nullable(),
+  automations: z.object({
+    won_on_accept: z.boolean(),
+    lost_on_decline: z.boolean(),
+    contacted_on_follow_up: z.boolean(),
+    project_on_won: z.boolean(),
+  }),
+});
+
+// Everyone who can see leads needs the stage names and sources; only admins
+// change them, the same as switching the plugin on or off.
+routes.get("/settings", requirePermission("customers", "read"), (c) =>
+  c.json(ok(getLeadsConfig())),
+);
+
+routes.put("/settings", async (c) => {
+  const user = c.get("user") as { is_admin?: boolean } | undefined;
+  if (!user?.is_admin) return c.json({ success: false, error: "Forbidden" }, 403);
+  const parsed = configSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ success: false, error: "Invalid settings" }, 400);
+  return c.json(ok(saveLeadsConfig(parsed.data)));
 });
 
 function filtersFrom(c: { req: { query: (k: string) => string | undefined } }) {
@@ -116,7 +152,7 @@ routes.post(
 
 registerBackendPlugin({
   id: "leads",
-  version: "1.0.0",
+  version: "1.1.0",
   routes,
   migrations: leadsMigrations,
   listing: {

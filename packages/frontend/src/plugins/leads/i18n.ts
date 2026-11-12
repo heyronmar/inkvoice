@@ -55,6 +55,36 @@ registerTranslations("en", {
     follow_ups_due: "{{count}} follow-ups due",
     view_list: "List view",
     view_board: "Board view",
+    settings_saved: "Leads settings saved",
+    settings_stages: "Pipeline stages",
+    settings_stages_hint:
+      "Drag to reorder, rename or hide stages. The order is used by the board and the list tabs. A hidden stage still shows while leads are in it.",
+    settings_stage_name: "Stage name",
+    settings_stage_show: "Show",
+    settings_stage_locked: "Always last",
+    settings_reorder: "Drag to reorder",
+    settings_sources: "Lead sources",
+    settings_sources_hint:
+      "The choices for where a lead came from. Removing one doesn't change leads that already use it.",
+    settings_source_placeholder: "New source, e.g. Instagram",
+    settings_add: "Add",
+    settings_follow_up: "Follow-ups",
+    settings_follow_up_label: "Set the next follow-up automatically, after",
+    settings_follow_up_days: "days",
+    settings_follow_up_hint:
+      "Used when you add a lead or move it to Contacted, Quoted or another open stage. You can still change the date.",
+    settings_automations: "Automations",
+    auto_won_on_accept: "Move to Won when a quote is accepted",
+    auto_won_on_accept_hint: "When the lead's customer accepts a quote, or it becomes an invoice.",
+    auto_lost_on_decline: "Move to Lost when a quote is declined or expires",
+    auto_lost_on_decline_hint: "Only when the customer has no other quote still open.",
+    auto_contacted_on_follow_up: "Move to Contacted when you set a follow-up",
+    auto_contacted_on_follow_up_hint:
+      "Setting a follow-up date on a New lead means you've been in touch.",
+    auto_project_on_won: "Create a Time Tracking project when a lead is won",
+    auto_project_on_won_hint:
+      "Named after the company, linked to its customer, ready to log time against. Made once per lead.",
+    auto_needs_time_tracking: "Needs the Time Tracking plugin switched on.",
   },
 });
 
@@ -110,5 +140,35 @@ registerTranslations("tr", {
     follow_ups_due: "{{count}} takip bekliyor",
     view_list: "Liste görünümü",
     view_board: "Pano görünümü",
+    settings_saved: "Ayarlar kaydedildi",
+    settings_stages: "Aşamalar",
+    settings_stages_hint:
+      "Aşamaları sürükleyerek sıralayın, yeniden adlandırın veya gizleyin. Sıralama pano ve liste sekmelerinde kullanılır. Gizli bir aşama, içinde kayıt varken görünmeye devam eder.",
+    settings_stage_name: "Aşama adı",
+    settings_stage_show: "Göster",
+    settings_stage_locked: "Her zaman sonda",
+    settings_reorder: "Sıralamak için sürükleyin",
+    settings_sources: "Kaynaklar",
+    settings_sources_hint:
+      "Kaydın nereden geldiğine dair seçenekler. Birini kaldırmak, onu kullanan kayıtları değiştirmez.",
+    settings_source_placeholder: "Yeni kaynak, ör. Instagram",
+    settings_add: "Ekle",
+    settings_follow_up: "Takipler",
+    settings_follow_up_label: "Sonraki takibi otomatik ayarla, şu kadar sonra:",
+    settings_follow_up_days: "gün",
+    settings_follow_up_hint:
+      "Kayıt eklediğinizde veya açık bir aşamaya taşıdığınızda kullanılır. Tarihi yine de değiştirebilirsiniz.",
+    settings_automations: "Otomasyonlar",
+    auto_won_on_accept: "Teklif kabul edilince Kazanıldı'ya taşı",
+    auto_won_on_accept_hint:
+      "Müşteri bir teklifi kabul ettiğinde veya teklif faturaya dönüştüğünde.",
+    auto_lost_on_decline: "Teklif reddedilince veya süresi dolunca Kaybedildi'ye taşı",
+    auto_lost_on_decline_hint: "Yalnızca müşterinin açık başka bir teklifi yoksa.",
+    auto_contacted_on_follow_up: "Takip tarihi ayarlanınca İletişime geçildi'ye taşı",
+    auto_contacted_on_follow_up_hint:
+      "Yeni bir kayda takip tarihi koymak, iletişime geçtiğiniz anlamına gelir.",
+    auto_project_on_won: "Kazanılınca Zaman Takibi projesi oluştur",
+    auto_project_on_won_hint: "Şirketin adıyla, müşterisine bağlı olarak bir kez oluşturulur.",
+    auto_needs_time_tracking: "Zaman Takibi eklentisinin açık olması gerekir.",
   },
 });

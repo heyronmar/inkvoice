@@ -8,6 +8,7 @@ import { PluginGuard } from "../PluginGuard";
 import { registerPlugin } from "../registry";
 import "./i18n";
 import LeadsPage from "./LeadsPage";
+import LeadsSettings from "./LeadsSettings";
 
 const PLUGIN_ID = "leads";
 
@@ -34,4 +35,5 @@ registerPlugin({
   nameKey: "leads.name",
   descriptionKey: "leads.description",
   icon: Target,
+  settings: LeadsSettings,
 });

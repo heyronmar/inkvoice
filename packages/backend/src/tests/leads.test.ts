@@ -6,6 +6,8 @@ import { closeDatabase, initDatabase } from "../database/connection";
 import { runMigrations } from "../database/migrations";
 import { seed } from "../database/seed";
 import "../plugins"; // registers leads so its migrations run
+import { getDb } from "../database/connection";
+import { defaultLeadsConfig, getLeadsConfig, saveLeadsConfig } from "../plugins/leads/config";
 import {
   convertLead,
   countByStage,
@@ -19,7 +21,7 @@ import {
 import { runPluginMigrations } from "../plugins/runner";
 import { setPluginEnabled } from "../plugins/settings";
 import { getCustomer } from "../services/customer.service";
-import { acceptQuote, createQuote } from "../services/quote.service";
+import { acceptQuote, createQuote, rejectQuote } from "../services/quote.service";
 import { resetEnvCache } from "../utils/env";
 
 const TEST_DB = "./data/test-leads.db";
@@ -154,5 +156,118 @@ describe("leads routes", () => {
     expect(leads.name).toBe("Leads");
     expect(leads.installed).toBe(true);
     expect(leads.enabled).toBe(true);
+  });
+});
+
+function quoteFor(customer_id: string) {
+  return createQuote({
+    customer_id,
+    issue_date: "2026-11-13",
+    items: [{ description: "Work", quantity: 1, unit_price: 100 }],
+  } as any);
+}
+
+function withAutomations(
+  automations: Partial<ReturnType<typeof defaultLeadsConfig>["automations"]>,
+) {
+  const base = defaultLeadsConfig();
+  saveLeadsConfig({ ...base, automations: { ...base.automations, ...automations } });
+}
+
+describe("leads settings", () => {
+  afterAll(() => saveLeadsConfig(defaultLeadsConfig()));
+
+  test("stages keep Won and Lost last and visible; sources are de-duplicated", () => {
+    const config = saveLeadsConfig({
+      stages: [
+        { id: "won", label: "Signed", hidden: true },
+        { id: "quoted", label: " Proposal sent ", hidden: false },
+        { id: "new", label: null, hidden: false },
+        { id: "contacted", label: null, hidden: true },
+      ],
+      sources: ["website", "Instagram", "Instagram", " "],
+      follow_up_days: 3,
+    });
+    expect(config.stages.map((s) => s.id)).toEqual(["quoted", "new", "contacted", "won", "lost"]);
+    expect(config.stages[0].label).toBe("Proposal sent");
+    expect(config.stages.find((s) => s.id === "won")).toEqual({
+      id: "won",
+      label: "Signed",
+      hidden: false,
+    });
+    expect(config.stages.find((s) => s.id === "contacted")?.hidden).toBe(true);
+    expect(config.sources).toEqual(["website", "Instagram"]);
+    expect(getLeadsConfig().follow_up_days).toBe(3);
+  });
+
+  test("won on accept can be switched off", () => {
+    withAutomations({ won_on_accept: false });
+    const lead = createLead({ name: "Rangi" });
+    const { customer_id } = startQuote(lead.id)!;
+    acceptQuote(quoteFor(customer_id).id);
+    listLeads();
+    expect(getLead(lead.id)!.stage).toBe("quoted");
+  });
+
+  test("lost on decline, unless another quote is still open", () => {
+    withAutomations({ lost_on_decline: true });
+    const lead = createLead({ name: "Anahera" });
+    const { customer_id } = startQuote(lead.id)!;
+    const declined = quoteFor(customer_id);
+    const open = quoteFor(customer_id);
+    rejectQuote(declined.id);
+    listLeads();
+    expect(getLead(lead.id)!.stage).toBe("quoted");
+    rejectQuote(open.id);
+    listLeads();
+    expect(getLead(lead.id)!.stage).toBe("lost");
+  });
+
+  test("setting a follow-up on an existing New lead moves it to Contacted", () => {
+    withAutomations({ contacted_on_follow_up: true });
+    expect(createLead({ name: "Nikau", next_follow_up: "2030-01-01" }).stage).toBe("new");
+    const lead = createLead({ name: "Ihaia" });
+    expect(lead.stage).toBe("new");
+    expect(updateLead(lead.id, { next_follow_up: "2030-01-02" })!.stage).toBe("contacted");
+  });
+
+  test("winning a lead creates one Time Tracking project when that plugin is on", () => {
+    withAutomations({ project_on_won: true });
+    setPluginEnabled("time-tracker", true);
+    const lead = createLead({ name: "Mere", company: "Rata Design" });
+    updateLead(lead.id, { stage: "won" });
+    const won = getLead(lead.id)!;
+    expect(won.customer_id).toBeTruthy();
+    const project = getDb()
+      .query("SELECT * FROM tt_projects WHERE id = ?")
+      .get(won.project_id) as any;
+    expect(project.name).toBe("Rata Design");
+    expect(project.customer_id).toBe(won.customer_id);
+    updateLead(lead.id, { stage: "contacted" });
+    updateLead(lead.id, { stage: "won" });
+    expect(getLead(lead.id)!.project_id).toBe(won.project_id);
+
+    setPluginEnabled("time-tracker", false);
+    const other = createLead({ name: "Tane" });
+    updateLead(other.id, { stage: "won" });
+    expect(getLead(other.id)!.project_id).toBeNull();
+  });
+
+  test("settings routes: anyone with access reads, admins save, bad input is rejected", async () => {
+    setPluginEnabled("leads", true);
+    const read = (await (await call("/settings")).json()) as any;
+    expect(read.data.stages).toHaveLength(5);
+    const bad = await call("/settings", { method: "PUT", body: JSON.stringify({ sources: "x" }) });
+    expect(bad.status).toBe(400);
+    const saved = await call("/settings", {
+      method: "PUT",
+      body: JSON.stringify({ ...read.data, sources: ["Trade show"] }),
+    });
+    expect(((await saved.json()) as any).data.sources).toEqual(["Trade show"]);
+    const custom = await call("/leads", {
+      method: "POST",
+      body: JSON.stringify({ name: "Kahu", source: "Trade show" }),
+    });
+    expect(custom.status).toBe(201);
   });
 });

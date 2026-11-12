@@ -58,15 +58,14 @@ import { useTranslation } from "@/i18n";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import { useSettingsStore } from "@/stores/settings.store";
 import {
-  LEAD_SOURCES,
-  LEAD_STAGES,
+  CLOSED_STAGES as CLOSED,
   type Lead,
   type LeadInput,
   type LeadStage,
+  type LeadsConfig,
   leadsApi,
 } from "./api";
-
-const CLOSED: LeadStage[] = ["won", "lost"];
+import { isoDateIn, useLeadLabels, useLeadsConfig } from "./config";
 
 const STAGE_STYLES: Record<LeadStage, string> = {
   new: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
@@ -91,6 +90,8 @@ export default function LeadsPage() {
   const canQuote = canCreate && can("invoices", "create");
   const settings = useSettingsStore((s) => s.settings);
   const currency = settings.base_currency || settings.currency || "USD";
+  const { config } = useLeadsConfig();
+  const { stageLabel, sourceLabel } = useLeadLabels(config);
 
   const [view, setView] = usePersistentState<"list" | "board">("inkvoice-leads-view", "list");
   const [stage, setStage] = useState<LeadStage | "all">("all");
@@ -135,6 +136,8 @@ export default function LeadsPage() {
     !!l.next_follow_up && !CLOSED.includes(l.stage) && l.next_follow_up <= today;
   const dueCount = leads.filter(isDue).length;
   const total = Object.values(counts).reduce((a, b) => a + (b ?? 0), 0);
+  // Stages in the saved order. A hidden stage still shows while leads are in it.
+  const stages = config.stages.filter((s) => !s.hidden || (counts[s.id] ?? 0) > 0).map((s) => s.id);
 
   const openNew = () => {
     setEditing(null);
@@ -148,8 +151,11 @@ export default function LeadsPage() {
   const changeStage = async (lead: Lead, next: LeadStage) => {
     // Move it straight away so a dragged card does not jump back while saving.
     setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, stage: next } : l)));
+    const input: LeadInput = { stage: next };
+    const days = config.follow_up_days;
+    if (days && next !== "new" && !CLOSED.includes(next)) input.next_follow_up = isoDateIn(days);
     try {
-      await leadsApi.update(lead.id, { stage: next });
+      await leadsApi.update(lead.id, input);
       fetchLeads();
     } catch (e) {
       toast.error((e as Error).message);
@@ -252,7 +258,6 @@ export default function LeadsPage() {
     );
   };
 
-  const stageLabel = (s: LeadStage) => t(`leads.stage_${s}`);
   const followUp = (l: Lead) =>
     l.next_follow_up ? (
       <span className={cn(isDue(l) && "font-medium text-destructive")}>
@@ -316,7 +321,7 @@ export default function LeadsPage() {
               <TabsTrigger value="all">
                 {t("leads.tab_all")} <span className="ml-1 text-muted-foreground">{total}</span>
               </TabsTrigger>
-              {LEAD_STAGES.map((s) => (
+              {stages.map((s) => (
                 <TabsTrigger key={s} value={s}>
                   {stageLabel(s)}
                   <span className="ml-1 text-muted-foreground">{counts[s] ?? 0}</span>
@@ -340,6 +345,7 @@ export default function LeadsPage() {
       {view === "board" ? (
         <LeadBoard
           leads={leads}
+          stages={stages}
           canEdit={canEdit}
           currency={currency}
           stageLabel={stageLabel}
@@ -399,7 +405,7 @@ export default function LeadsPage() {
                     {l.phone && <div className="text-xs">{l.phone}</div>}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {l.source ? t(`leads.source_${l.source}`) : "-"}
+                    {l.source ? sourceLabel(l.source) : "-"}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {l.value != null ? formatCurrency(l.value, currency) : "-"}
@@ -417,7 +423,7 @@ export default function LeadsPage() {
                           <SelectValue>{stageLabel(l.stage)}</SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                          {LEAD_STAGES.map((s) => (
+                          {stages.map((s) => (
                             <SelectItem key={s} value={s}>
                               {stageLabel(s)}
                             </SelectItem>
@@ -444,6 +450,8 @@ export default function LeadsPage() {
       <LeadDialog
         open={dialogOpen}
         lead={editing}
+        config={config}
+        stages={stages}
         onOpenChange={setDialogOpen}
         onSaved={fetchLeads}
       />
@@ -464,17 +472,43 @@ export default function LeadsPage() {
 function LeadDialog({
   open,
   lead,
+  config,
+  stages,
   onOpenChange,
   onSaved,
 }: {
   open: boolean;
   lead: Lead | null;
+  config: LeadsConfig;
+  stages: LeadStage[];
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
 }) {
   const { t } = useTranslation();
+  const { stageLabel, sourceLabel } = useLeadLabels(config);
   const [form, setForm] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const days = config.follow_up_days;
+  const initialFollowUp = lead ? (lead.next_follow_up ?? "") : days ? isoDateIn(days) : "";
+  // The lead's own source stays selectable even if it was removed from the list.
+  const sources =
+    lead?.source && !config.sources.includes(lead.source)
+      ? [...config.sources, lead.source]
+      : config.sources;
+
+  // Moving to another open stage resets an untouched follow-up date to the default.
+  const changeStage = (stage: string) =>
+    setForm((f) => ({
+      ...f,
+      stage,
+      next_follow_up:
+        days &&
+        stage !== "new" &&
+        !CLOSED.includes(stage as LeadStage) &&
+        f.next_follow_up === initialFollowUp
+          ? isoDateIn(days)
+          : f.next_follow_up,
+    }));
 
   useEffect(() => {
     if (!open) return;
@@ -486,9 +520,11 @@ function LeadDialog({
       source: lead?.source ?? "",
       value: lead?.value != null ? String(lead.value) : "",
       stage: lead?.stage ?? "new",
-      next_follow_up: lead?.next_follow_up ?? "",
+      next_follow_up: initialFollowUp,
       notes: lead?.notes ?? "",
     });
+    // initialFollowUp only changes with lead/config, which re-open the dialog.
+    // biome-ignore lint/correctness/useExhaustiveDependencies: see above
   }, [open, lead]);
 
   const set = (key: string) => (value: string) => setForm((f) => ({ ...f, [key]: value }));
@@ -499,7 +535,7 @@ function LeadDialog({
       company: form.company,
       email: form.email.trim(),
       phone: form.phone,
-      source: (form.source || null) as LeadInput["source"],
+      source: form.source || null,
       value: form.value === "" ? null : Number(form.value),
       stage: form.stage as LeadStage,
       next_follow_up: form.next_follow_up || null,
@@ -550,14 +586,14 @@ function LeadDialog({
             >
               <SelectTrigger className="w-full">
                 <SelectValue>
-                  {form.source ? t(`leads.source_${form.source}`) : t("leads.no_source")}
+                  {form.source ? sourceLabel(form.source) : t("leads.no_source")}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">{t("leads.no_source")}</SelectItem>
-                {LEAD_SOURCES.map((s) => (
+                {sources.map((s) => (
                   <SelectItem key={s} value={s}>
-                    {t(`leads.source_${s}`)}
+                    {sourceLabel(s)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -566,14 +602,17 @@ function LeadDialog({
           {text("value", t("leads.field_value"), "number")}
           <div className="space-y-1">
             <Label>{t("leads.field_stage")}</Label>
-            <Select value={form.stage || "new"} onValueChange={(v) => v && set("stage")(v)}>
+            <Select value={form.stage || "new"} onValueChange={(v) => v && changeStage(v)}>
               <SelectTrigger className="w-full">
-                <SelectValue>{t(`leads.stage_${form.stage || "new"}`)}</SelectValue>
+                <SelectValue>{stageLabel((form.stage || "new") as LeadStage)}</SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {LEAD_STAGES.map((s) => (
+                {(stages.includes(form.stage as LeadStage)
+                  ? stages
+                  : [...stages, form.stage as LeadStage]
+                ).map((s) => (
                   <SelectItem key={s} value={s}>
-                    {t(`leads.stage_${s}`)}
+                    {stageLabel(s)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -605,6 +644,7 @@ function LeadDialog({
 
 function LeadBoard({
   leads,
+  stages,
   canEdit,
   currency,
   stageLabel,
@@ -614,6 +654,7 @@ function LeadBoard({
   onMove,
 }: {
   leads: Lead[];
+  stages: LeadStage[];
   canEdit: boolean;
   currency: string;
   stageLabel: (s: LeadStage) => string;
@@ -634,7 +675,7 @@ function LeadBoard({
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
       <div className="grid grid-flow-col auto-cols-[minmax(15rem,1fr)] gap-3 overflow-x-auto pb-2">
-        {LEAD_STAGES.map((stage) => {
+        {stages.map((stage) => {
           const items = leads.filter((l) => l.stage === stage);
           const sum = items.reduce((a, l) => a + (l.value ?? 0), 0);
           return (

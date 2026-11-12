@@ -4,12 +4,12 @@
 // (see PluginDetailView). Data comes from the plugins store; the enable
 // switch writes through PUT /api/v1/plugins/:id as before.
 
-import { LayoutGrid, List, RotateCw } from "lucide-react";
+import { LayoutGrid, List, RotateCw, Settings2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -38,6 +38,7 @@ import {
 } from "./catalog";
 import { catalogIcon } from "./icon-map";
 import { PluginDetailView } from "./PluginDetailView";
+import { getPlugins } from "./registry";
 import { usePluginsStore } from "./use-plugins.store";
 
 const STATUS_FILTERS: StatusFilter[] = ["all", "enabled", "disabled", "planned"];
@@ -110,9 +111,28 @@ function PluginCard({ entry, view }: { entry: CatalogPluginEntry; view: PluginsV
         {entry.installedVersion && (
           <span className="text-xs text-muted-foreground">v{entry.installedVersion}</span>
         )}
+        <SettingsLink entry={entry} />
         <EnableSwitch entry={entry} />
       </div>
     </div>
+  );
+}
+
+/** Gear next to the switch for an enabled plugin that has its own settings. */
+function SettingsLink({ entry }: { entry: CatalogPluginEntry }) {
+  const { t } = useTranslation();
+  const hasSettings = Boolean(getPlugins().find((p) => p.id === entry.id)?.settings);
+  if (!entry.enabled || entry.blockedReason !== null || !hasSettings) return null;
+  const label = `${t("plugins.open_settings")}: ${entry.name}`;
+  return (
+    <Link
+      to={`/settings/plugins/${entry.id}`}
+      className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+      title={t("plugins.open_settings")}
+      aria-label={label}
+    >
+      <Settings2 />
+    </Link>
   );
 }
 

@@ -65,7 +65,9 @@ export function PluginDetailView({ pluginId }: { pluginId: string }) {
   const chipKey = blockedChipKey(entry.blockedReason, provenance?.managed === true);
   const settingsPlugin = getPlugins().find((p) => p.id === entry.id);
   const SettingsPanel = settingsPlugin?.settings;
-  const showSettings = entry.installed && entry.blockedReason === null && Boolean(SettingsPanel);
+  // A switched-off plugin's API is unavailable, so its settings only show while it's on.
+  const showSettings =
+    entry.installed && entry.enabled && entry.blockedReason === null && Boolean(SettingsPanel);
   const egressEnabled = provenance?.egressEnabled ?? false;
 
   const toggle = async (next: boolean) => {

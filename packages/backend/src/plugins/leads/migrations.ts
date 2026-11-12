@@ -30,4 +30,15 @@ export const leadsMigrations: PluginMigration[] = [
       `);
     },
   },
+  {
+    version: 2,
+    name: "leads_project_link",
+    up: (db) => {
+      // The Time Tracking project made when a lead is won, so it's made once.
+      const has = db
+        .query("SELECT COUNT(*) AS n FROM pragma_table_info('ld_leads') WHERE name = 'project_id'")
+        .get() as { n: number };
+      if (!has.n) db.exec("ALTER TABLE ld_leads ADD COLUMN project_id TEXT");
+    },
+  },
 ];
