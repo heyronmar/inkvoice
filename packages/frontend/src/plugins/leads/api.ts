@@ -4,30 +4,60 @@ import { pluginFetch } from "../api";
 
 const BASE = "/plugins/leads";
 
-export const LEAD_STAGES = ["new", "contacted", "quoted", "won", "lost"] as const;
-export type LeadStage = (typeof LEAD_STAGES)[number];
-
 /** Built-in sources (translated labels). Businesses can add their own in Leads settings. */
 export const LEAD_SOURCES = ["website", "referral", "social", "phone", "email", "other"] as const;
 
-export const CLOSED_STAGES: readonly LeadStage[] = ["won", "lost"];
+/** Won and Lost close a lead; they always exist and come last. */
+export const CLOSED_STAGES: readonly string[] = ["won", "lost"];
+export const isClosed = (stage: string) => CLOSED_STAGES.includes(stage);
+
+/** Working stages allowed on top of Won and Lost. */
+export const MAX_OPEN_STAGES = 8;
+
+export const STAGE_COLORS = [
+  "sky",
+  "amber",
+  "violet",
+  "emerald",
+  "rose",
+  "teal",
+  "orange",
+  "slate",
+] as const;
+export type StageColor = (typeof STAGE_COLORS)[number];
+
+/** Things that can move a lead to a stage, in the order they usually happen. */
+export const LEAD_EVENTS = [
+  "follow_up_set",
+  "quote_created",
+  "quote_sent",
+  "quote_accepted",
+  "quote_declined",
+  "invoice_created",
+  "invoice_paid",
+] as const;
+export type LeadEvent = (typeof LEAD_EVENTS)[number];
+
+export interface StageActions {
+  make_customer: boolean;
+  follow_up_days: number | null;
+  create_project: boolean;
+}
 
 export interface StageSetting {
-  id: LeadStage;
+  /** Built-in id, or "c_…" for a stage the business added. */
+  id: string;
   label: string | null;
+  color: StageColor;
   hidden: boolean;
+  actions: StageActions;
 }
 
 export interface LeadsConfig {
   stages: StageSetting[];
   sources: string[];
-  follow_up_days: number | null;
-  automations: {
-    won_on_accept: boolean;
-    lost_on_decline: boolean;
-    contacted_on_follow_up: boolean;
-    project_on_won: boolean;
-  };
+  /** Which stage each event moves a lead to; an event belongs to one stage at most. */
+  triggers: Partial<Record<LeadEvent, string>>;
 }
 
 export interface Lead {
@@ -38,12 +68,16 @@ export interface Lead {
   phone: string | null;
   source: string | null;
   value: number | null;
-  stage: LeadStage;
+  stage: string;
   next_follow_up: string | null;
   notes: string | null;
   customer_id: string | null;
   converted_at: string | null;
   project_id: string | null;
+  /** The quote this lead follows, once one has been made for it. */
+  quote_id: string | null;
+  quote_number: string | null;
+  quote_status: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -64,33 +98,41 @@ export type LeadInput = Partial<
 >;
 
 export interface LeadFilters {
-  stage?: LeadStage;
+  stage?: string;
   search?: string;
   from?: string;
   to?: string;
 }
 
+/** The user's local date, so follow-ups set by automations land on the right day. */
+function localToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function query(filters: LeadFilters): string {
-  const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v)) as Record<
-    string,
-    string
-  >;
+  const params = Object.fromEntries(
+    Object.entries({ ...filters, today: localToday() }).filter(([, v]) => v),
+  ) as Record<string, string>;
   const qs = new URLSearchParams(params).toString();
   return qs ? `?${qs}` : "";
 }
 
 export const leadsApi = {
   list: (filters: LeadFilters) =>
-    pluginFetch<{ data: { items: Lead[]; counts: Partial<Record<LeadStage, number>> } }>(
+    pluginFetch<{ data: { items: Lead[]; counts: Record<string, number> } }>(
       `${BASE}/leads${query(filters)}`,
     ),
   exportUrl: (filters: LeadFilters) => `/api/v1${BASE}/leads/export${query(filters)}`,
   create: (input: LeadInput) =>
-    pluginFetch<{ data: Lead }>(`${BASE}/leads`, { method: "POST", body: JSON.stringify(input) }),
+    pluginFetch<{ data: Lead }>(`${BASE}/leads`, {
+      method: "POST",
+      body: JSON.stringify({ ...input, today: localToday() }),
+    }),
   update: (id: string, input: LeadInput) =>
     pluginFetch<{ data: Lead }>(`${BASE}/leads/${id}`, {
       method: "PUT",
-      body: JSON.stringify(input),
+      body: JSON.stringify({ ...input, today: localToday() }),
     }),
   remove: (id: string) => pluginFetch(`${BASE}/leads/${id}`, { method: "DELETE" }),
   convert: (id: string) =>

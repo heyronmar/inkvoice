@@ -41,4 +41,26 @@ export const leadsMigrations: PluginMigration[] = [
       if (!has.n) db.exec("ALTER TABLE ld_leads ADD COLUMN project_id TEXT");
     },
   },
+  {
+    version: 3,
+    name: "leads_quote_events",
+    up: (db) => {
+      // quote_id: the quote a lead follows. events_seen: automation events
+      // already handled (JSON array), so each fires once.
+      const columns = new Set(
+        (
+          db.query("SELECT name FROM pragma_table_info('ld_leads')").all() as { name: string }[]
+        ).map((c) => c.name),
+      );
+      if (!columns.has("quote_id")) db.exec("ALTER TABLE ld_leads ADD COLUMN quote_id TEXT");
+      if (!columns.has("events_seen")) {
+        db.exec("ALTER TABLE ld_leads ADD COLUMN events_seen TEXT");
+        // Leads that already have a customer keep NULL: their first sync takes
+        // the current state of their quotes as the starting point, so the
+        // upgrade itself moves nothing. The rest start with nothing seen.
+        db.exec("UPDATE ld_leads SET events_seen = '[]' WHERE customer_id IS NULL");
+      }
+      db.exec("CREATE INDEX IF NOT EXISTS idx_ld_leads_quote ON ld_leads(quote_id)");
+    },
+  },
 ];

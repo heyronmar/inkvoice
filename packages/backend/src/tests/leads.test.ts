@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { unlinkSync } from "node:fs";
 import type { Hono } from "hono";
 import { createApp } from "../app";
@@ -101,15 +101,21 @@ describe("leads service", () => {
     expect(getCustomer(customer_id)!.customer_type).toBe("individual");
   });
 
-  test("a quoted lead becomes won when its customer accepts a quote", () => {
+  test("a lead moves to Quoted once its quote exists, then Won when it's accepted", () => {
     const lead = createLead({ name: "Tama" });
     const { customer_id } = startQuote(lead.id)!;
-    expect(getLead(lead.id)!.stage).toBe("quoted");
+    // Starting a quote doesn't move the lead; saving the quote does.
+    expect(getLead(lead.id)!.stage).toBe("new");
     const quote = createQuote({
       customer_id,
       issue_date: "2026-11-12",
       items: [{ description: "Website", quantity: 1, unit_price: 500 }],
     } as any);
+    listLeads();
+    const quoted = getLead(lead.id)!;
+    expect(quoted.stage).toBe("quoted");
+    expect(quoted.quote_id).toBe(quote.id);
+    expect(quoted.quote_number).toBe(quote.quote_number);
     acceptQuote(quote.id);
     expect(listLeads({ stage: "won" }).some((l) => l.id === lead.id)).toBe(true);
   });
@@ -142,8 +148,13 @@ describe("leads routes", () => {
     expect(csv).toContain("Hemi");
 
     const quote = (await (await call(`/leads/${id}/quote`, { method: "POST" })).json()) as any;
-    expect(quote.data.lead.stage).toBe("quoted");
     expect(quote.data.customer_id).toBeTruthy();
+
+    const unknown = await call("/leads", {
+      method: "POST",
+      body: JSON.stringify({ name: "Ghost", stage: "c_nope1234" }),
+    });
+    expect(unknown.status).toBe(400);
   });
 
   test("listed in the Plugins tab with its own name", async () => {
@@ -167,41 +178,122 @@ function quoteFor(customer_id: string) {
   } as any);
 }
 
-function withAutomations(
-  automations: Partial<ReturnType<typeof defaultLeadsConfig>["automations"]>,
-) {
-  const base = defaultLeadsConfig();
-  saveLeadsConfig({ ...base, automations: { ...base.automations, ...automations } });
+type Config = ReturnType<typeof defaultLeadsConfig>;
+
+/** Default settings with some stages' actions and triggers changed. */
+function configure(change: (c: Config) => void): Config {
+  const config = defaultLeadsConfig();
+  change(config);
+  return saveLeadsConfig(config);
 }
 
-describe("leads settings", () => {
-  afterAll(() => saveLeadsConfig(defaultLeadsConfig()));
+const stage = (c: Config, id: string) => c.stages.find((s) => s.id === id)!;
 
-  test("stages keep Won and Lost last and visible; sources are de-duplicated", () => {
-    const config = saveLeadsConfig({
-      stages: [
-        { id: "won", label: "Signed", hidden: true },
-        { id: "quoted", label: " Proposal sent ", hidden: false },
-        { id: "new", label: null, hidden: false },
-        { id: "contacted", label: null, hidden: true },
-      ],
-      sources: ["website", "Instagram", "Instagram", " "],
-      follow_up_days: 3,
-    });
-    expect(config.stages.map((s) => s.id)).toEqual(["quoted", "new", "contacted", "won", "lost"]);
-    expect(config.stages[0].label).toBe("Proposal sent");
-    expect(config.stages.find((s) => s.id === "won")).toEqual({
-      id: "won",
-      label: "Signed",
-      hidden: false,
-    });
-    expect(config.stages.find((s) => s.id === "contacted")?.hidden).toBe(true);
-    expect(config.sources).toEqual(["website", "Instagram"]);
-    expect(getLeadsConfig().follow_up_days).toBe(3);
+describe("leads settings", () => {
+  // Each test shapes its own pipeline; leads left over would block removing a stage.
+  beforeEach(() => getDb().run("DELETE FROM ld_leads"));
+  afterAll(() => {
+    getDb().run("DELETE FROM ld_leads");
+    saveLeadsConfig(defaultLeadsConfig());
   });
 
-  test("won on accept can be switched off", () => {
-    withAutomations({ won_on_accept: false });
+  test("custom stages: Won and Lost stay last, names are required, sources de-duplicated", () => {
+    const base = defaultLeadsConfig();
+    const config = saveLeadsConfig({
+      ...base,
+      stages: [
+        { ...stage(base, "won"), label: "Signed", hidden: true },
+        { ...stage(base, "quoted"), label: " Proposal sent " },
+        {
+          id: "c_order1",
+          label: "Order materials",
+          color: "teal",
+          hidden: false,
+          actions: stage(base, "new").actions,
+        },
+        {
+          id: "c_blank1",
+          label: " ",
+          color: "rose",
+          hidden: false,
+          actions: stage(base, "new").actions,
+        },
+        stage(base, "new"),
+      ],
+      sources: ["website", "Instagram", "Instagram", " "],
+    });
+    expect(config.stages.map((s) => s.id)).toEqual([
+      "quoted",
+      "c_order1",
+      "c_blank1",
+      "new",
+      "won",
+      "lost",
+    ]);
+    expect(config.stages[0].label).toBe("Proposal sent");
+    expect(stage(config, "c_blank1").label).toBe("Stage");
+    expect(stage(config, "won")).toMatchObject({ label: "Signed", hidden: false });
+    expect(config.sources).toEqual(["website", "Instagram"]);
+    // Contacted was removed, so nothing points there.
+    expect(Object.values(config.triggers)).not.toContain("contacted");
+  });
+
+  test("contradicting rules are dropped", () => {
+    const config = configure((c) => {
+      c.triggers = {
+        quote_accepted: "lost",
+        invoice_paid: "lost",
+        quote_declined: "won",
+        quote_sent: "c_gone1",
+      };
+      stage(c, "lost").actions = { make_customer: true, follow_up_days: 3, create_project: true };
+      stage(c, "won").actions.follow_up_days = 5;
+    });
+    expect(config.triggers).toEqual({});
+    expect(stage(config, "lost").actions).toEqual({
+      make_customer: false,
+      follow_up_days: null,
+      create_project: false,
+    });
+    expect(stage(config, "won").actions.follow_up_days).toBeNull();
+  });
+
+  test("old settings carry over", () => {
+    const config = saveLeadsConfig({
+      stages: [{ id: "contacted", label: "Talking", hidden: false }],
+      follow_up_days: 4,
+      automations: {
+        won_on_accept: true,
+        lost_on_decline: true,
+        contacted_on_follow_up: true,
+        project_on_won: true,
+      },
+    } as any);
+    expect(config.stages.map((s) => s.id)).toEqual(["contacted", "won", "lost"]);
+    expect(stage(config, "contacted").actions.follow_up_days).toBe(4);
+    expect(stage(config, "won").actions.create_project).toBe(true);
+    expect(config.triggers).toEqual({
+      follow_up_set: "contacted",
+      quote_accepted: "won",
+      quote_declined: "lost",
+      invoice_created: "won",
+    });
+  });
+
+  test("a stage with leads in it can't be removed", () => {
+    saveLeadsConfig(defaultLeadsConfig());
+    const lead = createLead({ name: "Pita", stage: "contacted" });
+    const without = defaultLeadsConfig();
+    without.stages = without.stages.filter((s) => s.id !== "contacted");
+    expect(() => saveLeadsConfig(without)).toThrow(/Contacted \(\d+\)/);
+    deleteLead(lead.id);
+  });
+
+  test("accepted quotes can be left alone", () => {
+    configure((c) => {
+      delete c.triggers.quote_accepted;
+      delete c.triggers.invoice_created;
+    });
     const lead = createLead({ name: "Rangi" });
     const { customer_id } = startQuote(lead.id)!;
     acceptQuote(quoteFor(customer_id).id);
@@ -209,30 +301,95 @@ describe("leads settings", () => {
     expect(getLead(lead.id)!.stage).toBe("quoted");
   });
 
-  test("lost on decline, unless another quote is still open", () => {
-    withAutomations({ lost_on_decline: true });
+  test("declined goes to Lost; a revised quote brings the lead back", () => {
+    configure((c) => {
+      c.triggers.quote_declined = "lost";
+    });
     const lead = createLead({ name: "Anahera" });
     const { customer_id } = startQuote(lead.id)!;
-    const declined = quoteFor(customer_id);
-    const open = quoteFor(customer_id);
-    rejectQuote(declined.id);
+    const first = quoteFor(customer_id);
     listLeads();
-    expect(getLead(lead.id)!.stage).toBe("quoted");
-    rejectQuote(open.id);
+    rejectQuote(first.id);
     listLeads();
     expect(getLead(lead.id)!.stage).toBe("lost");
+    const revised = quoteFor(customer_id);
+    listLeads();
+    expect(getLead(lead.id)).toMatchObject({ stage: "quoted", quote_id: revised.id });
   });
 
-  test("setting a follow-up on an existing New lead moves it to Contacted", () => {
-    withAutomations({ contacted_on_follow_up: true });
+  test("an event fires once: a lead moved by hand isn't pulled back", () => {
+    saveLeadsConfig(defaultLeadsConfig());
+    const lead = createLead({ name: "Hine" });
+    const { customer_id } = startQuote(lead.id)!;
+    quoteFor(customer_id);
+    listLeads();
+    expect(getLead(lead.id)!.stage).toBe("quoted");
+    updateLead(lead.id, { stage: "contacted" });
+    listLeads();
+    expect(getLead(lead.id)!.stage).toBe("contacted");
+  });
+
+  test("quote events can go to custom stages; the last one reached wins", () => {
+    configure((c) => {
+      c.stages.splice(3, 0, {
+        id: "c_sched1",
+        label: "Schedule work",
+        color: "teal",
+        hidden: false,
+        actions: { make_customer: false, follow_up_days: null, create_project: false },
+      });
+      c.triggers = { quote_sent: "quoted", quote_accepted: "c_sched1", invoice_paid: "won" };
+    });
+    const lead = createLead({ name: "Kiri" });
+    const { customer_id } = startQuote(lead.id)!;
+    const quote = quoteFor(customer_id);
+    acceptQuote(quote.id); // sent and accepted seen in one go
+    listLeads();
+    expect(getLead(lead.id)!.stage).toBe("c_sched1");
+  });
+
+  test("setting a follow-up moves an existing open lead, once", () => {
+    configure((c) => {
+      c.triggers.follow_up_set = "contacted";
+    });
     expect(createLead({ name: "Nikau", next_follow_up: "2030-01-01" }).stage).toBe("new");
     const lead = createLead({ name: "Ihaia" });
-    expect(lead.stage).toBe("new");
     expect(updateLead(lead.id, { next_follow_up: "2030-01-02" })!.stage).toBe("contacted");
+    updateLead(lead.id, { stage: "new" });
+    expect(updateLead(lead.id, { next_follow_up: "2030-01-03" })!.stage).toBe("new");
+    // A stage chosen in the same change wins.
+    const other = createLead({ name: "Ruia" });
+    expect(updateLead(other.id, { next_follow_up: "2030-01-02", stage: "quoted" })!.stage).toBe(
+      "quoted",
+    );
   });
 
-  test("winning a lead creates one Time Tracking project when that plugin is on", () => {
-    withAutomations({ project_on_won: true });
+  test("arriving in a stage sets the follow-up in the user's local days", () => {
+    configure((c) => {
+      stage(c, "contacted").actions.follow_up_days = 3;
+    });
+    const lead = createLead({ name: "Moana" });
+    expect(
+      updateLead(lead.id, { stage: "contacted" }, { today: "2026-12-30" })!.next_follow_up,
+    ).toBe("2027-01-02");
+    // A date the user typed in the same change is kept.
+    const typed = createLead({ name: "Tui" });
+    expect(
+      updateLead(typed.id, { stage: "contacted", next_follow_up: "2027-05-01" })!.next_follow_up,
+    ).toBe("2027-05-01");
+    expect(
+      createLead({ name: "Huia", stage: "contacted" }, { today: "2026-01-01" }).next_follow_up,
+    ).toBe("2026-01-04");
+  });
+
+  test("arriving can make a customer, and a Time Tracking project once", () => {
+    configure((c) => {
+      stage(c, "contacted").actions.make_customer = true;
+      stage(c, "won").actions.create_project = true;
+    });
+    const met = createLead({ name: "Aperahama" });
+    expect(updateLead(met.id, { stage: "contacted" })!.customer_id).toBeTruthy();
+
     setPluginEnabled("time-tracker", true);
     const lead = createLead({ name: "Mere", company: "Rata Design" });
     updateLead(lead.id, { stage: "won" });
@@ -253,12 +410,33 @@ describe("leads settings", () => {
     expect(getLead(other.id)!.project_id).toBeNull();
   });
 
+  test("leads from before the upgrade aren't moved by quotes they already had", () => {
+    saveLeadsConfig(defaultLeadsConfig());
+    const lead = createLead({ name: "Old" });
+    const { customer_id } = convertLead(lead.id)!;
+    acceptQuote(quoteFor(customer_id).id);
+    getDb().run("UPDATE ld_leads SET events_seen = NULL WHERE id = ?", [lead.id]);
+    listLeads();
+    expect(getLead(lead.id)!.stage).toBe("new");
+  });
+
   test("settings routes: anyone with access reads, admins save, bad input is rejected", async () => {
+    saveLeadsConfig(defaultLeadsConfig());
     setPluginEnabled("leads", true);
     const read = (await (await call("/settings")).json()) as any;
     expect(read.data.stages).toHaveLength(5);
     const bad = await call("/settings", { method: "PUT", body: JSON.stringify({ sources: "x" }) });
     expect(bad.status).toBe(400);
+    const tooMany = Array.from({ length: 9 }, (_, i) => ({
+      ...read.data.stages[0],
+      id: `c_extra${i}`,
+      label: `S${i}`,
+    }));
+    const many = await call("/settings", {
+      method: "PUT",
+      body: JSON.stringify({ ...read.data, stages: [...tooMany, ...read.data.stages.slice(3)] }),
+    });
+    expect(many.status).toBe(400);
     const saved = await call("/settings", {
       method: "PUT",
       body: JSON.stringify({ ...read.data, sources: ["Trade show"] }),

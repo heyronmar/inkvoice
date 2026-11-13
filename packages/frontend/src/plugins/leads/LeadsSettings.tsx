@@ -1,6 +1,6 @@
 // Leads settings, shown on the plugin's page under Settings → Plugins while the
-// plugin is on: stage order, names and visibility, the source list, the
-// automatic follow-up date and the stage automations.
+// plugin is on: the pipeline's stages (add, remove, reorder, rename, colour,
+// hide, and each stage's automations) and the source list.
 
 import {
   closestCenter,
@@ -19,27 +19,34 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Lock, Plus, X } from "lucide-react";
+import { GripVertical, Lock, Plus, Trash2, X, Zap } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { useTranslation } from "@/i18n";
 import { cn } from "@/lib/utils";
-import { usePluginsStore } from "../use-plugins.store";
-import { CLOSED_STAGES, type LeadsConfig, leadsApi, type StageSetting } from "./api";
-import { useLeadLabels, useLeadsConfig } from "./config";
-
-type Automation = keyof LeadsConfig["automations"];
-const AUTOMATIONS: Automation[] = [
-  "won_on_accept",
-  "lost_on_decline",
-  "contacted_on_follow_up",
-  "project_on_won",
-];
+import {
+  isClosed,
+  type LeadsConfig,
+  leadsApi,
+  MAX_OPEN_STAGES,
+  STAGE_COLORS,
+  type StageColor,
+  type StageSetting,
+} from "./api";
+import {
+  automationCount,
+  newStageId,
+  STAGE_SWATCHES,
+  useLeadLabels,
+  useLeadsConfig,
+} from "./config";
+import { StageAutomationsDialog } from "./StageAutomations";
 
 export default function LeadsSettings() {
   const { t } = useTranslation();
@@ -47,20 +54,51 @@ export default function LeadsSettings() {
   const [draft, setDraft] = useState<LeadsConfig>(saved);
   const [newSource, setNewSource] = useState("");
   const [saving, setSaving] = useState(false);
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [automating, setAutomating] = useState<string | null>(null);
   const { sourceLabel } = useLeadLabels(draft);
-  const timeTrackingOn = usePluginsStore((s) => s.isEnabled("time-tracker"));
 
   useEffect(() => setDraft(saved), [saved]);
+  // Lead counts per stage: a stage can only be removed once it's empty.
+  useEffect(() => {
+    leadsApi
+      .list({})
+      .then((res) => setCounts(res.data.counts))
+      .catch(() => {});
+  }, [saved]);
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
 
-  const open = draft.stages.filter((s) => !CLOSED_STAGES.includes(s.id));
-  const closed = draft.stages.filter((s) => CLOSED_STAGES.includes(s.id));
+  const open = draft.stages.filter((s) => !isClosed(s.id));
+  const closed = draft.stages.filter((s) => isClosed(s.id));
+  const atLimit = open.length >= MAX_OPEN_STAGES;
+  const unnamed = open.some((s) => s.id.startsWith("c_") && !s.label?.trim());
 
   const updateStage = (id: string, patch: Partial<StageSetting>) =>
     setDraft((d) => ({
       ...d,
       stages: d.stages.map((s) => (s.id === id ? { ...s, ...patch } : s)),
     }));
+
+  const addStage = () => {
+    if (atLimit) return;
+    const used = new Set(draft.stages.map((s) => s.color));
+    const color = STAGE_COLORS.find((c) => !used.has(c)) ?? "slate";
+    const stage: StageSetting = {
+      id: newStageId(),
+      label: "",
+      color,
+      hidden: false,
+      actions: { make_customer: false, follow_up_days: null, create_project: false },
+    };
+    setDraft((d) => ({ ...d, stages: [...open, stage, ...closed] }));
+  };
+
+  const removeStage = (id: string) =>
+    setDraft((d) => {
+      // Rules pointing at the stage go with it.
+      const triggers = Object.fromEntries(Object.entries(d.triggers).filter(([, s]) => s !== id));
+      return { ...d, stages: d.stages.filter((s) => s.id !== id), triggers };
+    });
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -95,6 +133,14 @@ export default function LeadsSettings() {
 
   if (!loaded) return null;
 
+  const rowProps = (s: StageSetting) => ({
+    stage: s,
+    leads: counts[s.id] ?? 0,
+    automations: automationCount(draft, s),
+    onChange: (p: Partial<StageSetting>) => updateStage(s.id, p),
+    onAutomate: () => setAutomating(s.id),
+  });
+
   return (
     <div className="space-y-6">
       <Section title={t("leads.settings_stages")} hint={t("leads.settings_stages_hint")}>
@@ -102,14 +148,30 @@ export default function LeadsSettings() {
           <SortableContext items={open.map((s) => s.id)} strategy={verticalListSortingStrategy}>
             <div className="space-y-2">
               {open.map((s) => (
-                <StageRow key={s.id} stage={s} onChange={(p) => updateStage(s.id, p)} />
+                <StageRow
+                  key={s.id}
+                  {...rowProps(s)}
+                  // Keep at least one working stage.
+                  onRemove={open.length > 1 ? () => removeStage(s.id) : undefined}
+                />
               ))}
             </div>
           </SortableContext>
         </DndContext>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" onClick={addStage} disabled={atLimit}>
+            <Plus className="h-4 w-4" /> {t("leads.settings_add_stage")}
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            {t("leads.settings_stage_limit", {
+              count: String(open.length),
+              max: String(MAX_OPEN_STAGES),
+            })}
+          </span>
+        </div>
         <div className="space-y-2">
           {closed.map((s) => (
-            <StageRow key={s.id} stage={s} locked onChange={(p) => updateStage(s.id, p)} />
+            <StageRow key={s.id} {...rowProps(s)} locked />
           ))}
         </div>
       </Section>
@@ -152,75 +214,26 @@ export default function LeadsSettings() {
         </div>
       </Section>
 
-      <Section title={t("leads.settings_follow_up")}>
-        <div className="flex flex-wrap items-center gap-3">
-          <Switch
-            id="leads-follow-up"
-            checked={draft.follow_up_days !== null}
-            onCheckedChange={(on) => setDraft((d) => ({ ...d, follow_up_days: on ? 3 : null }))}
-          />
-          <Label htmlFor="leads-follow-up" className="font-normal">
-            {t("leads.settings_follow_up_label")}
-          </Label>
-          {draft.follow_up_days !== null && (
-            <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                min={1}
-                max={365}
-                className="w-20"
-                aria-label={t("leads.settings_follow_up_days")}
-                value={draft.follow_up_days}
-                onChange={(e) =>
-                  setDraft((d) => ({
-                    ...d,
-                    follow_up_days: Math.min(365, Math.max(1, Number(e.target.value) || 1)),
-                  }))
-                }
-              />
-              <span className="text-sm text-muted-foreground">
-                {t("leads.settings_follow_up_days")}
-              </span>
-            </div>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground">{t("leads.settings_follow_up_hint")}</p>
-      </Section>
-
-      <Section title={t("leads.settings_automations")}>
-        <div className="space-y-3">
-          {AUTOMATIONS.map((key) => (
-            <div key={key} className="flex items-start gap-3">
-              <Switch
-                id={`leads-${key}`}
-                className="mt-0.5"
-                checked={draft.automations[key]}
-                onCheckedChange={(on) =>
-                  setDraft((d) => ({ ...d, automations: { ...d.automations, [key]: on } }))
-                }
-              />
-              <div>
-                <Label htmlFor={`leads-${key}`}>{t(`leads.auto_${key}`)}</Label>
-                <p className="text-xs text-muted-foreground">
-                  {t(`leads.auto_${key}_hint`)}
-                  {key === "project_on_won" && !timeTrackingOn && (
-                    <> {t("leads.auto_needs_time_tracking")}</>
-                  )}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Section>
-
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {unnamed && (
+          <span className="text-xs text-destructive">{t("leads.settings_stage_needs_name")}</span>
+        )}
         <Button variant="outline" onClick={() => setDraft(saved)} disabled={!dirty || saving}>
           {t("common.cancel")}
         </Button>
-        <Button onClick={save} disabled={!dirty || saving}>
+        <Button onClick={save} disabled={!dirty || saving || unnamed}>
           {saving ? t("common.saving") : t("common.save")}
         </Button>
       </div>
+
+      <StageAutomationsDialog
+        open={automating !== null}
+        onOpenChange={(o) => !o && setAutomating(null)}
+        config={draft}
+        stageId={automating}
+        // Changes join the draft and are saved with the rest of the page.
+        onApply={setDraft}
+      />
     </div>
   );
 }
@@ -239,25 +252,35 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
 
 function StageRow({
   stage,
+  leads,
+  automations,
   locked = false,
   onChange,
+  onAutomate,
+  onRemove,
 }: {
   stage: StageSetting;
+  leads: number;
+  automations: number;
   locked?: boolean;
   onChange: (patch: Partial<StageSetting>) => void;
+  onAutomate: () => void;
+  onRemove?: () => void;
 }) {
   const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: stage.id,
     disabled: locked,
   });
-  const defaultName = t(`leads.stage_${stage.id}`);
+  const custom = stage.id.startsWith("c_");
+  const defaultName = custom ? t("leads.settings_stage_name") : t(`leads.stage_${stage.id}`);
+  const name = stage.label || defaultName;
   return (
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "flex items-center gap-2 rounded-lg border bg-background p-2",
+        "flex flex-wrap items-center gap-2 rounded-lg border bg-background p-2",
         isDragging && "relative z-10 shadow-lg",
       )}
     >
@@ -270,29 +293,50 @@ function StageRow({
           variant="ghost"
           size="icon-sm"
           className="cursor-grab touch-none active:cursor-grabbing"
-          aria-label={`${t("leads.settings_reorder")}: ${stage.label || defaultName}`}
+          aria-label={`${t("leads.settings_reorder")}: ${name}`}
           {...attributes}
           {...listeners}
         >
           <GripVertical />
         </Button>
       )}
+      <ColorPicker
+        value={stage.color}
+        label={`${t("leads.settings_stage_color")}: ${name}`}
+        onChange={(color) => onChange({ color })}
+      />
       <Input
         value={stage.label ?? ""}
         maxLength={40}
         placeholder={defaultName}
-        aria-label={`${t("leads.settings_stage_name")}: ${defaultName}`}
-        className="max-w-xs"
-        onChange={(e) => onChange({ label: e.target.value || null })}
+        aria-label={`${t("leads.settings_stage_name")}: ${name}`}
+        aria-invalid={custom && !stage.label?.trim()}
+        className="min-w-0 flex-1 sm:max-w-xs"
+        onChange={(e) => onChange({ label: e.target.value || (custom ? "" : null) })}
       />
-      <div className="ml-auto flex items-center gap-2">
+      <span className="text-xs text-muted-foreground tabular-nums">
+        {t("leads.settings_stage_leads", { count: String(leads) })}
+      </span>
+      <div className="ml-auto flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onAutomate}
+          aria-label={`${t("leads.automations")}: ${name}`}
+          title={t("leads.automations")}
+        >
+          <Zap className={cn("h-4 w-4", automations > 0 && "fill-amber-400 text-amber-500")} />
+          {automations > 0 && <span className="tabular-nums">{automations}</span>}
+        </Button>
         {locked ? (
-          <span className="text-xs text-muted-foreground">{t("leads.settings_stage_locked")}</span>
+          <span className="px-2 text-xs text-muted-foreground">
+            {t("leads.settings_stage_locked")}
+          </span>
         ) : (
           <>
             <Label
               htmlFor={`stage-${stage.id}`}
-              className="text-xs font-normal text-muted-foreground"
+              className="ml-1 text-xs font-normal text-muted-foreground"
             >
               {t("leads.settings_stage_show")}
             </Label>
@@ -301,9 +345,67 @@ function StageRow({
               checked={!stage.hidden}
               onCheckedChange={(on) => onChange({ hidden: !on })}
             />
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              disabled={!onRemove || leads > 0}
+              onClick={onRemove}
+              aria-label={`${t("common.delete")}: ${name}`}
+              title={
+                leads > 0
+                  ? t("leads.settings_stage_not_empty")
+                  : !onRemove
+                    ? t("leads.settings_stage_keep_one")
+                    : t("common.delete")
+              }
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
           </>
         )}
       </div>
     </div>
+  );
+}
+
+function ColorPicker({
+  value,
+  label,
+  onChange,
+}: {
+  value: StageColor;
+  label: string;
+  onChange: (color: StageColor) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={<Button variant="ghost" size="icon-sm" aria-label={label} title={label} />}
+      >
+        <span className={cn("h-4 w-4 rounded-full", STAGE_SWATCHES[value])} />
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-2" align="start">
+        <div className="grid grid-cols-4 gap-1.5">
+          {STAGE_COLORS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              aria-label={c}
+              aria-pressed={c === value}
+              className={cn(
+                "h-7 w-7 rounded-full ring-offset-2 ring-offset-background",
+                STAGE_SWATCHES[c],
+                c === value && "ring-2 ring-ring",
+              )}
+              onClick={() => {
+                onChange(c);
+                setOpen(false);
+              }}
+            />
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

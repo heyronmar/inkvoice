@@ -1,21 +1,81 @@
-// Leads settings on the client: the stage order and names, the source list and
-// the follow-up default, shared by the Leads page and the settings panel.
+// Leads settings on the client: the stages (order, names, colours, automations)
+// and the source list, shared by the Leads page, the board and the settings panel.
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "@/i18n";
-import { LEAD_SOURCES, LEAD_STAGES, type LeadStage, type LeadsConfig, leadsApi } from "./api";
+import {
+  LEAD_SOURCES,
+  type LeadEvent,
+  type LeadsConfig,
+  leadsApi,
+  type StageColor,
+  type StageSetting,
+} from "./api";
+
+const noActions = () => ({ make_customer: false, follow_up_days: null, create_project: false });
 
 export const DEFAULT_CONFIG: LeadsConfig = {
-  stages: LEAD_STAGES.map((id) => ({ id, label: null, hidden: false })),
+  stages: (
+    [
+      ["new", "sky"],
+      ["contacted", "amber"],
+      ["quoted", "violet"],
+      ["won", "emerald"],
+      ["lost", "slate"],
+    ] as const
+  ).map(([id, color]) => ({ id, label: null, color, hidden: false, actions: noActions() })),
   sources: [...LEAD_SOURCES],
-  follow_up_days: null,
-  automations: {
-    won_on_accept: true,
-    lost_on_decline: false,
-    contacted_on_follow_up: false,
-    project_on_won: false,
-  },
+  triggers: { quote_created: "quoted", quote_accepted: "won", invoice_created: "won" },
 };
+
+/** Badge and column colours. */
+export const STAGE_STYLES: Record<StageColor, string> = {
+  sky: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
+  amber: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  violet: "bg-violet-500/10 text-violet-700 dark:text-violet-300",
+  emerald: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  rose: "bg-rose-500/10 text-rose-700 dark:text-rose-300",
+  teal: "bg-teal-500/10 text-teal-700 dark:text-teal-300",
+  orange: "bg-orange-500/10 text-orange-700 dark:text-orange-300",
+  slate: "bg-muted text-muted-foreground",
+};
+
+/** Solid swatches for the colour picker. */
+export const STAGE_SWATCHES: Record<StageColor, string> = {
+  sky: "bg-sky-500",
+  amber: "bg-amber-500",
+  violet: "bg-violet-500",
+  emerald: "bg-emerald-500",
+  rose: "bg-rose-500",
+  teal: "bg-teal-500",
+  orange: "bg-orange-500",
+  slate: "bg-slate-400",
+};
+
+export function stageStyle(config: LeadsConfig, id: string): string {
+  const color = config.stages.find((s) => s.id === id)?.color ?? "slate";
+  return STAGE_STYLES[color];
+}
+
+/** Events that mean the deal went ahead can't send a lead to Lost, and a decline can't win it. */
+export function triggerAllowed(event: LeadEvent, stageId: string): boolean {
+  if (stageId === "lost") {
+    return !["quote_accepted", "invoice_created", "invoice_paid"].includes(event);
+  }
+  if (stageId === "won") return event !== "quote_declined";
+  return true;
+}
+
+/** How many automations a stage has, for the badge on its ⚡ button. */
+export function automationCount(config: LeadsConfig, stage: StageSetting): number {
+  const triggers = Object.values(config.triggers).filter((s) => s === stage.id).length;
+  const { make_customer, follow_up_days, create_project } = stage.actions;
+  return triggers + Number(make_customer) + Number(!!follow_up_days) + Number(create_project);
+}
+
+export function newStageId(): string {
+  return `c_${Math.random().toString(36).slice(2, 10).padEnd(6, "0")}`;
+}
 
 export function useLeadsConfig() {
   const [config, setConfig] = useState<LeadsConfig>(DEFAULT_CONFIG);
@@ -42,16 +102,10 @@ export function useLeadsConfig() {
 /** Labels for stages and sources, honouring custom stage names. */
 export function useLeadLabels(config: LeadsConfig) {
   const { t } = useTranslation();
-  const stageLabel = (id: LeadStage) =>
-    config.stages.find((s) => s.id === id)?.label || t(`leads.stage_${id}`);
+  const stageLabel = (id: string) =>
+    config.stages.find((s) => s.id === id)?.label ||
+    (["new", "contacted", "quoted", "won", "lost"].includes(id) ? t(`leads.stage_${id}`) : id);
   const sourceLabel = (source: string) =>
     (LEAD_SOURCES as readonly string[]).includes(source) ? t(`leads.source_${source}`) : source;
   return { stageLabel, sourceLabel };
-}
-
-/** Local date `days` from today, as YYYY-MM-DD. */
-export function isoDateIn(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }

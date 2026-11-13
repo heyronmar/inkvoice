@@ -1,7 +1,8 @@
 // Leads page: a list view (stage tabs, table sorted by next follow-up) or a
 // board view (one column per stage, drag a card to change its stage), with
 // search, a date filter and a dialog to add or edit a lead. A lead can become
-// a customer and a quote in one click.
+// a customer and a quote in one click; once it has a quote, its card opens it.
+// Admins set each stage's automations from the ⚡ button on its column.
 
 import {
   DndContext,
@@ -14,6 +15,7 @@ import {
 } from "@dnd-kit/core";
 import {
   Download,
+  FilePlus,
   FileText,
   Kanban,
   List,
@@ -24,6 +26,7 @@ import {
   Trash2,
   UserPlus,
   Users,
+  Zap,
 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -56,24 +59,11 @@ import { useCan } from "@/hooks/use-can";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useTranslation } from "@/i18n";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
+import { useAuthStore } from "@/stores/auth.store";
 import { useSettingsStore } from "@/stores/settings.store";
-import {
-  CLOSED_STAGES as CLOSED,
-  type Lead,
-  type LeadInput,
-  type LeadStage,
-  type LeadsConfig,
-  leadsApi,
-} from "./api";
-import { isoDateIn, useLeadLabels, useLeadsConfig } from "./config";
-
-const STAGE_STYLES: Record<LeadStage, string> = {
-  new: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
-  contacted: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  quoted: "bg-violet-500/10 text-violet-700 dark:text-violet-300",
-  won: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  lost: "bg-muted text-muted-foreground",
-};
+import { isClosed, type Lead, type LeadInput, type LeadsConfig, leadsApi } from "./api";
+import { automationCount, stageStyle, useLeadLabels, useLeadsConfig } from "./config";
+import { StageAutomationsDialog } from "./StageAutomations";
 
 function todayIso(): string {
   const d = new Date();
@@ -90,17 +80,19 @@ export default function LeadsPage() {
   const canQuote = canCreate && can("invoices", "create");
   const settings = useSettingsStore((s) => s.settings);
   const currency = settings.base_currency || settings.currency || "USD";
-  const { config } = useLeadsConfig();
+  const { config, setConfig } = useLeadsConfig();
   const { stageLabel, sourceLabel } = useLeadLabels(config);
+  const isAdmin = useAuthStore((s) => !!s.user?.is_admin);
+  const [automating, setAutomating] = useState<string | null>(null);
 
   const [view, setView] = usePersistentState<"list" | "board">("inkvoice-leads-view", "list");
-  const [stage, setStage] = useState<LeadStage | "all">("all");
+  const [stage, setStage] = useState<string>("all");
   // The board shows every stage as a column, so the stage tab does not apply.
   const stageFilter = view === "board" || stage === "all" ? undefined : stage;
   const [search, setSearch] = useState("");
   const [dateRange, setDateRange] = useState<{ from?: string; to?: string }>({});
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [counts, setCounts] = useState<Partial<Record<LeadStage, number>>>({});
+  const [counts, setCounts] = useState<Record<string, number>>({});
   const [editing, setEditing] = useState<Lead | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -132,8 +124,7 @@ export default function LeadsPage() {
   }, [fetchLeads]);
 
   const today = todayIso();
-  const isDue = (l: Lead) =>
-    !!l.next_follow_up && !CLOSED.includes(l.stage) && l.next_follow_up <= today;
+  const isDue = (l: Lead) => !!l.next_follow_up && !isClosed(l.stage) && l.next_follow_up <= today;
   const dueCount = leads.filter(isDue).length;
   const total = Object.values(counts).reduce((a, b) => a + (b ?? 0), 0);
   // Stages in the saved order. A hidden stage still shows while leads are in it.
@@ -148,14 +139,12 @@ export default function LeadsPage() {
     setDialogOpen(true);
   };
 
-  const changeStage = async (lead: Lead, next: LeadStage) => {
+  const changeStage = async (lead: Lead, next: string) => {
     // Move it straight away so a dragged card does not jump back while saving.
+    // The stage's arrival actions (follow-up date, …) run on the server.
     setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, stage: next } : l)));
-    const input: LeadInput = { stage: next };
-    const days = config.follow_up_days;
-    if (days && next !== "new" && !CLOSED.includes(next)) input.next_follow_up = isoDateIn(days);
     try {
-      await leadsApi.update(lead.id, input);
+      await leadsApi.update(lead.id, { stage: next });
       fetchLeads();
     } catch (e) {
       toast.error((e as Error).message);
@@ -181,6 +170,18 @@ export default function LeadsPage() {
     }
   };
 
+  const saveAutomations = async (next: LeadsConfig) => {
+    try {
+      const res = await leadsApi.saveSettings(next);
+      setConfig(res.data);
+      toast.success(t("leads.settings_saved"));
+      fetchLeads();
+    } catch (e) {
+      toast.error((e as Error).message);
+      throw e;
+    }
+  };
+
   const handleDelete = async () => {
     if (!deleteId) return;
     try {
@@ -198,16 +199,30 @@ export default function LeadsPage() {
     const size = compact ? "icon-xs" : "icon";
     return (
       <>
-        {canQuote && !CLOSED.includes(l.stage) && (
+        {l.quote_id && l.quote_number ? (
+          // It already has a quote, so open that rather than starting another.
           <Button
             variant="ghost"
             size={size}
-            title={t("leads.create_quote")}
-            aria-label={t("leads.create_quote")}
-            onClick={() => createQuote(l)}
+            title={t("leads.open_quote", { number: l.quote_number })}
+            aria-label={t("leads.open_quote", { number: l.quote_number })}
+            onClick={() => navigate(`/quotes/${l.quote_id}`)}
           >
             <FileText className="h-4 w-4" />
           </Button>
+        ) : (
+          canQuote &&
+          l.stage !== "won" && (
+            <Button
+              variant="ghost"
+              size={size}
+              title={t("leads.create_quote")}
+              aria-label={t("leads.create_quote")}
+              onClick={() => createQuote(l)}
+            >
+              <FilePlus className="h-4 w-4" />
+            </Button>
+          )
         )}
         {l.customer_id ? (
           <Button
@@ -265,6 +280,13 @@ export default function LeadsPage() {
         {isDue(l) && l.next_follow_up < today && ` · ${t("leads.overdue")}`}
       </span>
     ) : null;
+  const quoteChip = (l: Lead) =>
+    l.quote_number ? (
+      <span className="text-xs text-muted-foreground">
+        {l.quote_number}
+        {l.quote_status && ` · ${t(`quotes.status_${l.quote_status}`)}`}
+      </span>
+    ) : null;
   const colCount = 7;
 
   return (
@@ -316,7 +338,7 @@ export default function LeadsPage() {
 
       <div className="flex flex-col lg:flex-row lg:items-center gap-3">
         {view === "list" && (
-          <Tabs value={stage} onValueChange={(v) => setStage(v as LeadStage | "all")}>
+          <Tabs value={stage} onValueChange={(v) => setStage(v as string)}>
             <TabsList>
               <TabsTrigger value="all">
                 {t("leads.tab_all")} <span className="ml-1 text-muted-foreground">{total}</span>
@@ -349,6 +371,13 @@ export default function LeadsPage() {
           canEdit={canEdit}
           currency={currency}
           stageLabel={stageLabel}
+          stageStyle={(id) => stageStyle(config, id)}
+          automations={(id) => {
+            const s = config.stages.find((x) => x.id === id);
+            return s ? automationCount(config, s) : 0;
+          }}
+          onAutomate={isAdmin ? setAutomating : undefined}
+          quoteChip={quoteChip}
           followUp={followUp}
           renderActions={renderActions}
           onOpen={openEdit}
@@ -399,6 +428,7 @@ export default function LeadsPage() {
                   <TableCell>
                     <div className="font-medium">{l.name}</div>
                     {l.company && <div className="text-xs text-muted-foreground">{l.company}</div>}
+                    {quoteChip(l)}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     <div>{l.email || "-"}</div>
@@ -414,10 +444,13 @@ export default function LeadsPage() {
                     {canEdit ? (
                       <Select
                         value={l.stage}
-                        onValueChange={(v) => v && v !== l.stage && changeStage(l, v as LeadStage)}
+                        onValueChange={(v) => v && v !== l.stage && changeStage(l, v)}
                       >
                         <SelectTrigger
-                          className={cn("border-transparent font-medium", STAGE_STYLES[l.stage])}
+                          className={cn(
+                            "border-transparent font-medium",
+                            stageStyle(config, l.stage),
+                          )}
                           aria-label={t("leads.col_stage")}
                         >
                           <SelectValue>{stageLabel(l.stage)}</SelectValue>
@@ -431,7 +464,7 @@ export default function LeadsPage() {
                         </SelectContent>
                       </Select>
                     ) : (
-                      <Badge className={STAGE_STYLES[l.stage]}>{stageLabel(l.stage)}</Badge>
+                      <Badge className={stageStyle(config, l.stage)}>{stageLabel(l.stage)}</Badge>
                     )}
                   </TableCell>
                   <TableCell className="text-sm tabular-nums">
@@ -454,6 +487,14 @@ export default function LeadsPage() {
         stages={stages}
         onOpenChange={setDialogOpen}
         onSaved={fetchLeads}
+      />
+
+      <StageAutomationsDialog
+        open={automating !== null}
+        onOpenChange={(o) => !o && setAutomating(null)}
+        config={config}
+        stageId={automating}
+        onApply={saveAutomations}
       />
 
       <ConfirmDialog
@@ -480,7 +521,7 @@ function LeadDialog({
   open: boolean;
   lead: Lead | null;
   config: LeadsConfig;
-  stages: LeadStage[];
+  stages: string[];
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
 }) {
@@ -488,27 +529,13 @@ function LeadDialog({
   const { stageLabel, sourceLabel } = useLeadLabels(config);
   const [form, setForm] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
-  const days = config.follow_up_days;
-  const initialFollowUp = lead ? (lead.next_follow_up ?? "") : days ? isoDateIn(days) : "";
+  // New leads start in the first stage; its follow-up action (if any) runs on save.
+  const firstStage = stages.find((s) => !isClosed(s)) ?? stages[0] ?? "new";
   // The lead's own source stays selectable even if it was removed from the list.
   const sources =
     lead?.source && !config.sources.includes(lead.source)
       ? [...config.sources, lead.source]
       : config.sources;
-
-  // Moving to another open stage resets an untouched follow-up date to the default.
-  const changeStage = (stage: string) =>
-    setForm((f) => ({
-      ...f,
-      stage,
-      next_follow_up:
-        days &&
-        stage !== "new" &&
-        !CLOSED.includes(stage as LeadStage) &&
-        f.next_follow_up === initialFollowUp
-          ? isoDateIn(days)
-          : f.next_follow_up,
-    }));
 
   useEffect(() => {
     if (!open) return;
@@ -519,11 +546,11 @@ function LeadDialog({
       phone: lead?.phone ?? "",
       source: lead?.source ?? "",
       value: lead?.value != null ? String(lead.value) : "",
-      stage: lead?.stage ?? "new",
-      next_follow_up: initialFollowUp,
+      stage: lead?.stage ?? firstStage,
+      next_follow_up: lead?.next_follow_up ?? "",
       notes: lead?.notes ?? "",
     });
-    // initialFollowUp only changes with lead/config, which re-open the dialog.
+    // firstStage only changes with the config, which re-opens the dialog.
     // biome-ignore lint/correctness/useExhaustiveDependencies: see above
   }, [open, lead]);
 
@@ -537,7 +564,7 @@ function LeadDialog({
       phone: form.phone,
       source: form.source || null,
       value: form.value === "" ? null : Number(form.value),
-      stage: form.stage as LeadStage,
+      stage: form.stage,
       next_follow_up: form.next_follow_up || null,
       notes: form.notes,
     };
@@ -602,15 +629,12 @@ function LeadDialog({
           {text("value", t("leads.field_value"), "number")}
           <div className="space-y-1">
             <Label>{t("leads.field_stage")}</Label>
-            <Select value={form.stage || "new"} onValueChange={(v) => v && changeStage(v)}>
+            <Select value={form.stage || firstStage} onValueChange={(v) => v && set("stage")(v)}>
               <SelectTrigger className="w-full">
-                <SelectValue>{stageLabel((form.stage || "new") as LeadStage)}</SelectValue>
+                <SelectValue>{stageLabel(form.stage || firstStage)}</SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {(stages.includes(form.stage as LeadStage)
-                  ? stages
-                  : [...stages, form.stage as LeadStage]
-                ).map((s) => (
+                {(stages.includes(form.stage) ? stages : [...stages, form.stage]).map((s) => (
                   <SelectItem key={s} value={s}>
                     {stageLabel(s)}
                   </SelectItem>
@@ -648,27 +672,36 @@ function LeadBoard({
   canEdit,
   currency,
   stageLabel,
+  stageStyle,
+  automations,
+  onAutomate,
+  quoteChip,
   followUp,
   renderActions,
   onOpen,
   onMove,
 }: {
   leads: Lead[];
-  stages: LeadStage[];
+  stages: string[];
   canEdit: boolean;
   currency: string;
-  stageLabel: (s: LeadStage) => string;
+  stageLabel: (s: string) => string;
+  stageStyle: (s: string) => string;
+  automations: (s: string) => number;
+  /** Admins only: open the stage's automations. */
+  onAutomate?: (s: string) => void;
+  quoteChip: (l: Lead) => ReactNode;
   followUp: (l: Lead) => ReactNode;
   renderActions: (l: Lead, compact?: boolean) => ReactNode;
   onOpen: (l: Lead) => void;
-  onMove: (l: Lead, stage: LeadStage) => void;
+  onMove: (l: Lead, stage: string) => void;
 }) {
   // A small drag distance keeps a plain click opening the lead.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const handleDragEnd = ({ active, over }: DragEndEvent) => {
     const lead = leads.find((l) => l.id === active.id);
-    const target = over?.id as LeadStage | undefined;
+    const target = over?.id as string | undefined;
     if (lead && target && target !== lead.stage) onMove(lead, target);
   };
 
@@ -683,8 +716,11 @@ function LeadBoard({
               key={stage}
               stage={stage}
               title={stageLabel(stage)}
+              style={stageStyle(stage)}
               count={items.length}
               total={sum > 0 ? formatCurrency(sum, currency) : null}
+              automations={automations(stage)}
+              onAutomate={onAutomate && (() => onAutomate(stage))}
             >
               {items.map((l) => (
                 <BoardCard key={l.id} lead={l} draggable={canEdit} onOpen={() => onOpen(l)}>
@@ -694,6 +730,7 @@ function LeadBoard({
                       {l.company && (
                         <div className="text-xs text-muted-foreground truncate">{l.company}</div>
                       )}
+                      {quoteChip(l)}
                     </div>
                     {l.value != null && (
                       <div className="text-sm tabular-nums shrink-0">
@@ -724,16 +761,23 @@ function LeadBoard({
 function BoardColumn({
   stage,
   title,
+  style,
   count,
   total,
+  automations,
+  onAutomate,
   children,
 }: {
-  stage: LeadStage;
+  stage: string;
   title: string;
+  style: string;
   count: number;
   total: string | null;
+  automations: number;
+  onAutomate?: () => void;
   children: ReactNode;
 }) {
+  const { t } = useTranslation();
   const { setNodeRef, isOver } = useDroppable({ id: stage });
   return (
     <div
@@ -743,11 +787,24 @@ function BoardColumn({
         isOver && "border-primary/50 bg-primary/5",
       )}
     >
-      <div className="flex items-center justify-between px-1 py-1">
-        <span className={cn("rounded-md px-2 py-0.5 text-xs font-medium", STAGE_STYLES[stage])}>
+      <div className="flex items-center justify-between gap-2 px-1 py-1">
+        <span className={cn("truncate rounded-md px-2 py-0.5 text-xs font-medium", style)}>
           {title} <span className="opacity-70">{count}</span>
         </span>
-        {total && <span className="text-xs text-muted-foreground tabular-nums">{total}</span>}
+        <div className="flex items-center gap-1">
+          {total && <span className="text-xs text-muted-foreground tabular-nums">{total}</span>}
+          {onAutomate && (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={onAutomate}
+              title={t("leads.automations")}
+              aria-label={`${t("leads.automations")}: ${title}`}
+            >
+              <Zap className={cn(automations > 0 && "fill-amber-400 text-amber-500")} />
+            </Button>
+          )}
+        </div>
       </div>
       {children}
     </div>
