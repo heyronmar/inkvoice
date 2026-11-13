@@ -1,0 +1,4 @@
+[submodule "packages/inkvoice-plugins"]
+	path = packages/inkvoice-plugins
+	url = ../inkvoice-plugins.git
+	branch = main

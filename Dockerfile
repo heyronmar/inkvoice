@@ -11,6 +11,7 @@ RUN bun install --frozen-lockfile
 # Copy source
 COPY packages/backend packages/backend
 COPY packages/frontend packages/frontend
+COPY packages/inkvoice-plugins packages/inkvoice-plugins
 
 # Build frontend
 RUN cd packages/frontend && bun run build
@@ -31,6 +32,7 @@ RUN bun install --production --frozen-lockfile
 # Copy built files
 COPY --from=builder /app/packages/backend/src packages/backend/src
 COPY --from=builder /app/packages/frontend/dist packages/frontend/dist
+COPY --from=builder /app/packages/inkvoice-plugins packages/inkvoice-plugins
 COPY templates templates
 
 # Create data directory

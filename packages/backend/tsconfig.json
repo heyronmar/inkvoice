@@ -12,8 +12,11 @@
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "./dist",
-    "rootDir": "./src",
-    "types": ["bun"]
+    "types": ["bun"],
+    "baseUrl": ".",
+    "paths": {
+      "@inkvoice/backend/*": ["./src/*"]
+    }
   },
   "include": ["src/**/*"]
 }

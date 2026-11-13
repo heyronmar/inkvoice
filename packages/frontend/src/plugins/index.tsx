@@ -12,7 +12,8 @@ import { installPluginNavGate } from "./install-nav-gate";
 import { PluginsSettingsTab } from "./PluginsSettingsTab";
 
 // Official plugins, each registering its surface on import.
-import "./leads";
+// Plugins from heyronmar/inkvoice-plugins (git submodule at packages/inkvoice-plugins).
+import "../../../inkvoice-plugins/plugins/leads/frontend";
 import "./time-tracker";
 
 installPluginNavGate();

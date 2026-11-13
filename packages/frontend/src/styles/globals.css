@@ -3,6 +3,8 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist-mono";
+/* Plugins live outside src (git submodule); scan them for classes too. */
+@source "../../../inkvoice-plugins";
 
 @custom-variant dark (&:is(.dark *));
 
