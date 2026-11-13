@@ -300,8 +300,47 @@ describe("schema migration runner", () => {
     ).toThrow();
   });
 
-  test("migrations reach version 33", () => {
-    expect(LATEST_MIGRATION_VERSION).toBe(33);
+  test("migrations reach version 35", () => {
+    expect(LATEST_MIGRATION_VERSION).toBe(35);
+  });
+
+  test("version 35 adds the service date columns to an existing invoice", () => {
+    runWith(db, () => runMigrations());
+    db.exec("DELETE FROM schema_migrations WHERE version >= 35");
+    db.exec("ALTER TABLE invoices DROP COLUMN service_date");
+    db.exec("ALTER TABLE invoices DROP COLUMN service_period_start");
+    db.exec("ALTER TABLE invoices DROP COLUMN service_period_end");
+    db.run("INSERT INTO customers (id, name) VALUES ('c1', 'Kunde GmbH')");
+    db.run(
+      "INSERT INTO invoices (id, invoice_number, customer_id, issue_date) VALUES ('i1', 'RE-1', 'c1', '2026-11-07')",
+    );
+
+    runWith(db, () => runMigrations());
+
+    const row = db
+      .query(
+        "SELECT invoice_number, service_date, service_period_start, service_period_end FROM invoices WHERE id = 'i1'",
+      )
+      .get() as Record<string, string | null>;
+    expect(row).toEqual({
+      invoice_number: "RE-1",
+      service_date: null,
+      service_period_start: null,
+      service_period_end: null,
+    });
+  });
+
+  test("the reduced-rate VAT category AA becomes S (EN 16931)", () => {
+    runWith(db, () => runMigrations());
+    db.exec("DELETE FROM schema_migrations WHERE version >= 34");
+    db.run(
+      "INSERT INTO tax_definitions (id, name, rate, category_code) VALUES ('t7', 'USt 7 %', 7, 'AA')",
+    );
+    runWith(db, () => runMigrations());
+    const row = db.query("SELECT category_code FROM tax_definitions WHERE id = 't7'").get() as {
+      category_code: string;
+    };
+    expect(row.category_code).toBe("S");
   });
 
   test("customer_payment_methods has the expected shape", () => {
