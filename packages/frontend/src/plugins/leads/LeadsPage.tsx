@@ -217,11 +217,14 @@ export default function LeadsPage() {
               navigate(`/quotes/${l.quote_id}`),
             )
           : canQuote &&
-            l.stage !== "won" &&
+            !isClosed(l.stage) &&
             action(t("leads.create_quote"), FilePlus, () => createQuote(l))}
         {l.customer_id
           ? action(t("leads.view_customer"), Users, () => navigate(`/customers/${l.customer_id}`))
-          : canCreate && action(t("leads.convert"), UserPlus, () => convert(l))}
+          : canCreate &&
+            // A lost lead isn't worth turning into a customer; Won still can be.
+            l.stage !== "lost" &&
+            action(t("leads.convert"), UserPlus, () => convert(l))}
         {canEdit && action(t("common.edit"), Pencil, () => openEdit(l))}
         {canDelete && action(t("common.delete"), Trash2, () => setDeleteId(l.id))}
       </>

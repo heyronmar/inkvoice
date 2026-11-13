@@ -82,12 +82,22 @@ registerTranslations("en", {
     settings_stage_delete: "Delete stage",
     open_quote: "Open quote {{number}}",
     auto_title: "Automations: {{stage}}",
-    auto_intro: "Choose what moves leads into this stage, and what happens when they arrive.",
-    auto_move_here: "Move leads to {{stage}} when",
+    auto_role_first:
+      "New leads start in this stage. Choose what happens when a lead is added or moved here.",
+    auto_role_middle: "Choose what moves leads here, and what happens when they arrive.",
+    auto_role_won: "Leads end up here when the deal goes ahead.",
+    auto_role_lost: "Leads end up here when the quote is turned down.",
+    auto_first_stage: "New leads start in {{stage}}, so nothing needs to move them here.",
+    auto_no_events:
+      "The stages before and after this one already use the events that could fit here. Move leads here by hand, or change those stages.",
+    auto_manual: "Only when I move them",
+    auto_manual_hint: "Drag a lead here, or pick this stage when editing it.",
+    settings_rules_adjusted:
+      "Some automations no longer fit the new stage order and were turned off. Check the ⚡ buttons.",
+    auto_move_here: "Move leads here automatically",
     auto_on_arrival: "When a lead arrives in {{stage}}",
-    auto_lost_no_actions: "Nothing happens when a lead is lost. Its customer and quotes are kept.",
-    auto_rules_note:
-      "Each event moves a lead once, when it happens, so a lead you've moved by hand stays put. Arrival actions also run when you move a lead here yourself, and they never move a lead on, so automations can't loop.",
+    auto_lost_no_actions:
+      "Nothing. A lost lead keeps its customer and quotes, and a new quote brings it back.",
     auto_needs_time_tracking: "Needs the Time Tracking plugin switched on.",
     event_follow_up_set: "A follow-up date is set",
     event_follow_up_set_hint:
@@ -104,9 +114,6 @@ registerTranslations("en", {
     event_invoice_created_hint: "Including quotes split into instalments.",
     event_invoice_paid: "The invoice is paid",
     event_invoice_paid_hint: "When every invoice made from the quote is paid.",
-    event_elsewhere: "Now moves leads to {{stage}}. Turning it on here moves it.",
-    event_not_for_lost: "Can't mark a lead lost: the deal went ahead.",
-    event_not_for_won: "Can't mark a lead won: the quote was turned down.",
     action_make_customer: "Make it a customer",
     action_make_customer_hint: "Creates the customer from the lead's details, once.",
     action_follow_up: "Set the next follow-up",
@@ -196,12 +203,23 @@ registerTranslations("tr", {
     settings_stage_delete: "Aşamayı sil",
     open_quote: "{{number}} teklifini aç",
     auto_title: "Otomasyonlar: {{stage}}",
-    auto_intro: "Kayıtları bu aşamaya neyin taşıyacağını ve geldiklerinde ne olacağını seçin.",
-    auto_move_here: "Kayıtları şu durumda {{stage}} aşamasına taşı",
+    auto_role_first:
+      "Yeni kayıtlar bu aşamada başlar. Bir kayıt eklendiğinde veya buraya taşındığında ne olacağını seçin.",
+    auto_role_middle: "Kayıtları buraya neyin taşıyacağını ve geldiklerinde ne olacağını seçin.",
+    auto_role_won: "İş gerçekleştiğinde kayıtlar buraya gelir.",
+    auto_role_lost: "Teklif reddedildiğinde kayıtlar buraya gelir.",
+    auto_first_stage:
+      "Yeni kayıtlar {{stage}} aşamasında başlar, bu yüzden taşınmalarına gerek yok.",
+    auto_no_events:
+      "Önceki ve sonraki aşamalar buraya uyabilecek olayları zaten kullanıyor. Kayıtları elle taşıyın veya o aşamaları değiştirin.",
+    auto_manual: "Yalnızca ben taşıdığımda",
+    auto_manual_hint: "Bir kaydı buraya sürükleyin veya düzenlerken bu aşamayı seçin.",
+    settings_rules_adjusted:
+      "Bazı otomasyonlar yeni aşama sırasına uymadığı için kapatıldı. ⚡ düğmelerini kontrol edin.",
+    auto_move_here: "Kayıtları otomatik olarak buraya taşı",
     auto_on_arrival: "Bir kayıt {{stage}} aşamasına geldiğinde",
-    auto_lost_no_actions: "Kaybedilen kayıtta hiçbir şey olmaz. Müşterisi ve teklifleri korunur.",
-    auto_rules_note:
-      "Her olay bir kaydı yalnızca bir kez, gerçekleştiği anda taşır; elle taşıdığınız kayıt yerinde kalır. Geliş eylemleri kaydı elle taşıdığınızda da çalışır ve kaydı başka aşamaya taşımaz, bu yüzden otomasyonlar döngüye girmez.",
+    auto_lost_no_actions:
+      "Hiçbir şey. Kaybedilen kayıt müşterisini ve tekliflerini korur; yeni bir teklif onu geri getirir.",
     auto_needs_time_tracking: "Zaman Takibi eklentisinin açık olması gerekir.",
     event_follow_up_set: "Takip tarihi ayarlandığında",
     event_follow_up_set_hint: "Açık bir kayda ilk kez ayarlandığında, ör. ilk görüşmeden sonra.",
@@ -219,9 +237,6 @@ registerTranslations("tr", {
     event_invoice_created_hint: "Taksitlere bölünen teklifler dahil.",
     event_invoice_paid: "Fatura ödendiğinde",
     event_invoice_paid_hint: "Tekliften oluşan tüm faturalar ödendiğinde.",
-    event_elsewhere: "Şu an kayıtları {{stage}} aşamasına taşıyor. Burada açmak onu buraya taşır.",
-    event_not_for_lost: "Kayıt kaybedildi olarak işaretlenemez: iş gerçekleşti.",
-    event_not_for_won: "Kayıt kazanıldı olarak işaretlenemez: teklif reddedildi.",
     action_make_customer: "Müşteriye dönüştür",
     action_make_customer_hint: "Kaydın bilgilerinden müşteri bir kez oluşturulur.",
     action_follow_up: "Sonraki takibi ayarla",

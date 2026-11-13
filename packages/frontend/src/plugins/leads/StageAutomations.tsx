@@ -1,6 +1,11 @@
-// One stage's automations: which events move leads into it, and what happens
-// when a lead arrives. Opened from the ⚡ button on a board column or a stage
-// row in Leads settings. Rules that would contradict each other can't be set.
+// One stage's automations, opened from the ⚡ button on a board column or a
+// stage row in Leads settings. Only what fits the stage's place is offered:
+//  - the first stage is where new leads start, so nothing moves leads in;
+//  - other stages pick one event, and only events in pipeline order (after
+//    earlier stages' events, before later ones') are listed;
+//  - Won takes the deal going ahead, Lost a declined quote;
+//  - arrival actions: a follow-up while the lead is being worked on, a
+//    customer once past the first stage, a project once won.
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -14,11 +19,20 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useTranslation } from "@/i18n";
 import { usePluginsStore } from "../use-plugins.store";
-import { isClosed, LEAD_EVENTS, type LeadEvent, type LeadsConfig, type StageActions } from "./api";
-import { triggerAllowed, useLeadLabels } from "./config";
+import type { LeadEvent, LeadsConfig, StageActions } from "./api";
+import { eventsFor, stageRole, stageTrigger, useLeadLabels } from "./config";
+
+const MANUAL = "manual";
 
 export function StageAutomationsDialog({
   open,
@@ -47,15 +61,18 @@ export function StageAutomationsDialog({
   const stage = draft.stages.find((s) => s.id === stageId);
   if (!stage || !stageId) return null;
   const name = stageLabel(stageId);
-  const closed = isClosed(stageId);
-  const isLost = stageId === "lost";
+  const role = stageRole(draft, stageId);
+  const trigger = stageTrigger(draft, stageId);
+  const events = eventsFor(draft, stageId);
+  const firstStage = draft.stages.find((s) => stageRole(draft, s.id) === "first");
 
-  const toggleTrigger = (event: LeadEvent, on: boolean) =>
+  const setTrigger = (value: string) =>
     setDraft((d) => {
-      const triggers = { ...d.triggers };
-      // An event belongs to one stage, so turning it on here takes it from another.
-      if (on) triggers[event] = stageId;
-      else delete triggers[event];
+      // One rule per stage: drop this stage's old event, then add the new one.
+      const triggers = Object.fromEntries(
+        Object.entries(d.triggers).filter(([, s]) => s !== stageId),
+      ) as LeadsConfig["triggers"];
+      if (value !== MANUAL) triggers[value as LeadEvent] = stageId;
       return { ...d, triggers };
     });
 
@@ -78,16 +95,50 @@ export function StageAutomationsDialog({
     }
   };
 
-  const eventHint = (event: LeadEvent) => {
-    if (!triggerAllowed(event, stageId)) {
-      return t(isLost ? "leads.event_not_for_lost" : "leads.event_not_for_won");
-    }
-    const elsewhere = draft.triggers[event];
-    if (elsewhere && elsewhere !== stageId) {
-      return t("leads.event_elsewhere", { stage: stageLabel(elsewhere) });
-    }
-    return t(`leads.event_${event}_hint`);
-  };
+  const followUp = (
+    <div className="flex items-start gap-3">
+      <Switch
+        id="action-follow-up"
+        className="mt-0.5"
+        checked={stage.actions.follow_up_days !== null}
+        onCheckedChange={(v) => setAction({ follow_up_days: v ? 3 : null })}
+      />
+      <div className="space-y-2">
+        <Label htmlFor="action-follow-up">{t("leads.action_follow_up")}</Label>
+        {stage.actions.follow_up_days !== null && (
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              min={1}
+              max={365}
+              className="w-20"
+              aria-label={t("leads.settings_follow_up_days")}
+              value={stage.actions.follow_up_days}
+              onChange={(e) =>
+                setAction({
+                  follow_up_days: Math.min(365, Math.max(1, Number(e.target.value) || 1)),
+                })
+              }
+            />
+            <span className="text-sm text-muted-foreground">
+              {t("leads.settings_follow_up_days")}
+            </span>
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">{t("leads.action_follow_up_hint")}</p>
+      </div>
+    </div>
+  );
+
+  const makeCustomer = (
+    <ActionSwitch
+      id="action-customer"
+      checked={stage.actions.make_customer}
+      onChange={(v) => setAction({ make_customer: v })}
+      label={t("leads.action_make_customer")}
+      hint={t("leads.action_make_customer_hint")}
+    />
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -95,86 +146,65 @@ export function StageAutomationsDialog({
       <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{t("leads.auto_title", { stage: name })}</DialogTitle>
-          <DialogDescription>{t("leads.auto_intro")}</DialogDescription>
+          <DialogDescription>{t(`leads.auto_role_${role}`)}</DialogDescription>
         </DialogHeader>
 
-        <div className="-mx-4 min-h-0 flex-1 space-y-4 overflow-y-auto px-4">
+        <div className="-mx-4 min-h-0 flex-1 overflow-y-auto px-4">
           <div className="grid gap-6 md:grid-cols-2">
             <section className="space-y-3">
               <h3 className="text-sm font-medium">{t("leads.auto_move_here", { stage: name })}</h3>
-              {LEAD_EVENTS.map((event) => {
-                const allowed = triggerAllowed(event, stageId);
-                const on = draft.triggers[event] === stageId;
-                return (
-                  <div key={event} className="flex items-start gap-3">
-                    <Switch
-                      id={`trigger-${event}`}
-                      className="mt-0.5"
-                      checked={on}
-                      disabled={!allowed}
-                      onCheckedChange={(v) => toggleTrigger(event, v)}
-                    />
-                    <div className={allowed ? undefined : "opacity-60"}>
-                      <Label htmlFor={`trigger-${event}`}>{t(`leads.event_${event}`)}</Label>
-                      <p className="text-xs text-muted-foreground">{eventHint(event)}</p>
-                    </div>
-                  </div>
-                );
-              })}
+              {role === "first" ? (
+                <p className="text-sm text-muted-foreground">
+                  {t("leads.auto_first_stage", { stage: name })}
+                </p>
+              ) : events.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("leads.auto_no_events")}</p>
+              ) : (
+                <>
+                  <Select value={trigger ?? MANUAL} onValueChange={(v) => v && setTrigger(v)}>
+                    <SelectTrigger
+                      className="w-full"
+                      aria-label={t("leads.auto_move_here", { stage: name })}
+                    >
+                      <SelectValue>
+                        {trigger ? t(`leads.event_${trigger}`) : t("leads.auto_manual")}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={MANUAL}>{t("leads.auto_manual")}</SelectItem>
+                      {events.map((e) => (
+                        <SelectItem key={e} value={e}>
+                          {t(`leads.event_${e}`)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {trigger
+                      ? t(`leads.event_${trigger}_hint`)
+                      : t("leads.auto_manual_hint", {
+                          stage: firstStage ? stageLabel(firstStage.id) : "",
+                        })}
+                  </p>
+                </>
+              )}
             </section>
 
             <section className="space-y-3 border-t pt-4 md:border-t-0 md:border-l md:pt-0 md:pl-6">
               <h3 className="text-sm font-medium">{t("leads.auto_on_arrival", { stage: name })}</h3>
-              {isLost ? (
-                <p className="text-xs text-muted-foreground">{t("leads.auto_lost_no_actions")}</p>
-              ) : (
+              {role === "lost" && (
+                <p className="text-sm text-muted-foreground">{t("leads.auto_lost_no_actions")}</p>
+              )}
+              {role === "first" && followUp}
+              {role === "middle" && (
                 <>
-                  <ActionSwitch
-                    id="action-customer"
-                    checked={stage.actions.make_customer}
-                    onChange={(v) => setAction({ make_customer: v })}
-                    label={t("leads.action_make_customer")}
-                    hint={t("leads.action_make_customer_hint")}
-                  />
-                  {!closed && (
-                    <div className="flex items-start gap-3">
-                      <Switch
-                        id="action-follow-up"
-                        className="mt-0.5"
-                        checked={stage.actions.follow_up_days !== null}
-                        onCheckedChange={(v) => setAction({ follow_up_days: v ? 3 : null })}
-                      />
-                      <div className="space-y-2">
-                        <Label htmlFor="action-follow-up">{t("leads.action_follow_up")}</Label>
-                        {stage.actions.follow_up_days !== null && (
-                          <div className="flex items-center gap-2">
-                            <Input
-                              type="number"
-                              min={1}
-                              max={365}
-                              className="w-20"
-                              aria-label={t("leads.settings_follow_up_days")}
-                              value={stage.actions.follow_up_days}
-                              onChange={(e) =>
-                                setAction({
-                                  follow_up_days: Math.min(
-                                    365,
-                                    Math.max(1, Number(e.target.value) || 1),
-                                  ),
-                                })
-                              }
-                            />
-                            <span className="text-sm text-muted-foreground">
-                              {t("leads.settings_follow_up_days")}
-                            </span>
-                          </div>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                          {t("leads.action_follow_up_hint")}
-                        </p>
-                      </div>
-                    </div>
-                  )}
+                  {makeCustomer}
+                  {followUp}
+                </>
+              )}
+              {role === "won" && (
+                <>
+                  {makeCustomer}
                   <ActionSwitch
                     id="action-project"
                     checked={stage.actions.create_project}
@@ -188,9 +218,6 @@ export function StageAutomationsDialog({
               )}
             </section>
           </div>
-          <p className="rounded-md bg-muted/60 p-3 text-xs text-muted-foreground">
-            {t("leads.auto_rules_note")}
-          </p>
         </div>
 
         <DialogFooter>

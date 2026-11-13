@@ -44,6 +44,7 @@ import {
   automationCount,
   newStageId,
   STAGE_SWATCHES,
+  tidyTriggers,
   useLeadLabels,
   useLeadsConfig,
 } from "./config";
@@ -96,12 +97,26 @@ export default function LeadsSettings() {
     setDraft((d) => ({ ...d, stages: [...open, stage, ...closed] }));
   };
 
-  const removeStage = (id: string) =>
-    setDraft((d) => {
-      // Rules pointing at the stage go with it.
-      const triggers = Object.fromEntries(Object.entries(d.triggers).filter(([, s]) => s !== id));
-      return { ...d, stages: d.stages.filter((s) => s.id !== id), triggers };
-    });
+  /**
+   * Apply a change to the stage list, then drop rules that no longer fit where
+   * the stages now sit (e.g. a stage moved to the front can't have a trigger).
+   */
+  const reshape = (stages: StageSetting[]) => {
+    const next = { ...draft, stages };
+    const tidy = tidyTriggers(next);
+    // Rules on a removed stage go with it without a warning.
+    const kept = Object.fromEntries(
+      Object.entries(draft.triggers).filter(([, id]) => stages.some((s) => s.id === id)),
+    );
+    const changed =
+      JSON.stringify(tidy.triggers) !== JSON.stringify(kept) ||
+      JSON.stringify(tidy.stages.map((s) => s.actions)) !==
+        JSON.stringify(stages.map((s) => s.actions));
+    if (changed) toast.info(t("leads.settings_rules_adjusted"));
+    setDraft(tidy);
+  };
+
+  const removeStage = (id: string) => reshape(draft.stages.filter((s) => s.id !== id));
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -111,7 +126,7 @@ export default function LeadsSettings() {
     if (!over || active.id === over.id) return;
     const from = open.findIndex((s) => s.id === active.id);
     const to = open.findIndex((s) => s.id === over.id);
-    setDraft((d) => ({ ...d, stages: [...arrayMove(open, from, to), ...closed] }));
+    reshape([...arrayMove(open, from, to), ...closed]);
   };
 
   const addSource = () => {

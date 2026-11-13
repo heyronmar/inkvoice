@@ -47,8 +47,37 @@ export const LEAD_EVENTS = [
 ] as const;
 export type LeadEvent = (typeof LEAD_EVENTS)[number];
 
-/** Events that mean the deal went ahead, so they can't send a lead to Lost. */
-const POSITIVE_EVENTS: readonly LeadEvent[] = ["quote_accepted", "invoice_created", "invoice_paid"];
+/** Events that move a deal forward, in the order they happen. */
+const FORWARD_EVENTS: readonly LeadEvent[] = [
+  "follow_up_set",
+  "quote_created",
+  "quote_sent",
+  "quote_accepted",
+  "invoice_created",
+  "invoice_paid",
+];
+const rank = (e: LeadEvent) => FORWARD_EVENTS.indexOf(e);
+
+/**
+ * Where a stage sits decides what makes sense for it:
+ *  - first: new leads start here, so nothing moves them in;
+ *  - middle: any forward event, in pipeline order;
+ *  - won: the deal going ahead (accepted, invoiced, paid);
+ *  - lost: a declined or expired quote.
+ */
+export type StageRole = "first" | "middle" | "won" | "lost";
+
+export function stageRole(stages: { id: string }[], id: string): StageRole {
+  if (id === "won" || id === "lost") return id;
+  return stages.find((s) => !isClosed(s.id))?.id === id ? "first" : "middle";
+}
+
+const ROLE_EVENTS: Record<StageRole, readonly LeadEvent[]> = {
+  first: [],
+  middle: FORWARD_EVENTS,
+  won: ["quote_accepted", "invoice_created", "invoice_paid"],
+  lost: ["quote_declined"],
+};
 
 /** What happens when a lead arrives in a stage, by automation or by hand. */
 export interface StageActions {
@@ -122,30 +151,47 @@ export function defaultLeadsConfig(): LeadsConfig {
       actions: noActions(),
     })),
     sources: [...LEAD_SOURCES],
-    triggers: { quote_created: "quoted", quote_accepted: "won", invoice_created: "won" },
+    // An invoice made from a quote counts as accepted too, so this covers both.
+    triggers: { quote_created: "quoted", quote_accepted: "won" },
   };
 }
 
 /**
- * Can this event move a lead to this stage? A deal going ahead can't mark it
- * Lost, and a declined quote can't mark it Won.
+ * Each stage gets at most one trigger, and triggers follow the pipeline: a
+ * later stage's event always happens after an earlier stage's. Rules that
+ * don't fit (e.g. after reordering stages) are dropped.
  */
-export function triggerAllowed(event: LeadEvent, stageId: string): boolean {
-  if (stageId === "lost") return !POSITIVE_EVENTS.includes(event);
-  if (stageId === "won") return event !== "quote_declined";
-  return true;
+function orderTriggers(
+  stages: StageSetting[],
+  raw: Partial<Record<string, unknown>>,
+): LeadsConfig["triggers"] {
+  const triggers: LeadsConfig["triggers"] = {};
+  let last = -1;
+  for (const stage of stages) {
+    const role = stageRole(stages, stage.id);
+    const pick = ROLE_EVENTS[role].find(
+      (e) => raw[e] === stage.id && (role === "lost" || rank(e) > last),
+    );
+    if (!pick) continue;
+    triggers[pick] = stage.id;
+    if (role !== "lost") last = rank(pick);
+  }
+  return triggers;
 }
 
 function cleanDays(days: unknown): number | null {
   return typeof days === "number" && days > 0 ? Math.min(Math.round(days), 365) : null;
 }
 
-function cleanActions(input: Partial<StageActions> | undefined, id: string): StageActions {
+/**
+ * Arrival actions that fit the stage: a follow-up while the lead is still
+ * being worked on, a customer once past the first stage, a project once won.
+ */
+function cleanActions(input: Partial<StageActions> | undefined, role: StageRole): StageActions {
   return {
-    make_customer: id !== "lost" && Boolean(input?.make_customer),
-    // A follow-up is for leads still being worked on.
-    follow_up_days: isClosed(id) ? null : cleanDays(input?.follow_up_days),
-    create_project: id !== "lost" && Boolean(input?.create_project),
+    make_customer: (role === "middle" || role === "won") && Boolean(input?.make_customer),
+    follow_up_days: role === "first" || role === "middle" ? cleanDays(input?.follow_up_days) : null,
+    create_project: role === "won" && Boolean(input?.create_project),
   };
 }
 
@@ -169,10 +215,7 @@ function fromLegacy(input: LegacyConfig, stages: StageSetting[]): LeadsConfig["t
     if (s.id === "won" && a.project_on_won) s.actions.create_project = true;
   }
   const triggers: LeadsConfig["triggers"] = { quote_created: "quoted" };
-  if (a.won_on_accept !== false) {
-    triggers.quote_accepted = "won";
-    triggers.invoice_created = "won";
-  }
+  if (a.won_on_accept !== false) triggers.quote_accepted = "won";
   if (a.lost_on_decline) triggers.quote_declined = "lost";
   if (a.contacted_on_follow_up) triggers.follow_up_set = "contacted";
   return triggers;
@@ -186,7 +229,8 @@ export function normalise(input: Partial<LeadsConfig> & LegacyConfig): LeadsConf
 
   let open = [...saved.keys()].filter(isOpenId).slice(0, MAX_OPEN_STAGES);
   if (open.length === 0) open = ["new"];
-  const stages: StageSetting[] = [...open, ...CLOSED_STAGES].map((id) => {
+  const order = [...open, ...CLOSED_STAGES].map((id) => ({ id }));
+  const stages: StageSetting[] = order.map(({ id }) => {
     const s = saved.get(id);
     const label = typeof s?.label === "string" ? s.label.trim().slice(0, 40) : "";
     return {
@@ -197,24 +241,17 @@ export function normalise(input: Partial<LeadsConfig> & LegacyConfig): LeadsConf
         ? (s?.color as StageColor)
         : (DEFAULT_COLORS[id] ?? "slate"),
       hidden: !isClosed(id) && Boolean(s?.hidden),
-      actions: cleanActions(s?.actions, id),
+      actions: cleanActions(s?.actions, stageRole(order, id)),
     };
   });
 
-  const ids = new Set(stages.map((s) => s.id));
   const rawTriggers =
     input.triggers && typeof input.triggers === "object"
       ? input.triggers
       : input.automations || input.follow_up_days !== undefined
         ? fromLegacy(input, stages)
         : base.triggers;
-  const triggers: LeadsConfig["triggers"] = {};
-  for (const event of LEAD_EVENTS) {
-    const target = rawTriggers[event];
-    if (typeof target === "string" && ids.has(target) && triggerAllowed(event, target)) {
-      triggers[event] = target;
-    }
-  }
+  const triggers = orderTriggers(stages, rawTriggers);
 
   const sources = (Array.isArray(input.sources) ? input.sources : base.sources)
     .map((s) => String(s).trim())

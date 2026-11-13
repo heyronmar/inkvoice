@@ -272,10 +272,43 @@ describe("leads settings", () => {
     expect(config.stages.map((s) => s.id)).toEqual(["contacted", "won", "lost"]);
     expect(stage(config, "contacted").actions.follow_up_days).toBe(4);
     expect(stage(config, "won").actions.create_project).toBe(true);
+    // Contacted is the only working stage, so it's where leads start and
+    // nothing moves them in; an invoice counts as accepted.
+    expect(config.triggers).toEqual({ quote_accepted: "won", quote_declined: "lost" });
+  });
+
+  test("rules follow the stage's place in the pipeline", () => {
+    const config = configure((c) => {
+      c.triggers = {
+        follow_up_set: "new", // first stage: leads start there
+        quote_created: "contacted",
+        quote_sent: "contacted", // one rule per stage
+        quote_accepted: "quoted", // fine: after quote_created
+        invoice_created: "won",
+      };
+      stage(c, "new").actions = { make_customer: true, follow_up_days: 2, create_project: true };
+      stage(c, "quoted").actions.create_project = true;
+      stage(c, "won").actions.make_customer = true;
+    });
     expect(config.triggers).toEqual({
-      follow_up_set: "contacted",
-      quote_accepted: "won",
-      quote_declined: "lost",
+      quote_created: "contacted",
+      quote_accepted: "quoted",
+      invoice_created: "won",
+    });
+    expect(stage(config, "new").actions).toEqual({
+      make_customer: false,
+      follow_up_days: 2,
+      create_project: false,
+    });
+    expect(stage(config, "quoted").actions.create_project).toBe(false);
+    expect(stage(config, "won").actions.make_customer).toBe(true);
+
+    // Moving Quoted before Contacted puts "accepted" ahead of "created": dropped.
+    const reordered = defaultLeadsConfig();
+    reordered.stages = ["new", "quoted", "contacted", "won", "lost"].map((id) => stage(config, id));
+    reordered.triggers = config.triggers;
+    expect(saveLeadsConfig(reordered).triggers).toEqual({
+      quote_accepted: "quoted",
       invoice_created: "won",
     });
   });
