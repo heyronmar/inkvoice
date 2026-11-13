@@ -218,9 +218,19 @@ export default function LeadsSettings() {
           </div>
         </Section>
 
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {unnamed && (
-            <span className="text-xs text-destructive">{t("leads.settings_stage_needs_name")}</span>
+        {/* Stays in view at the bottom while scrolling. The right padding keeps
+            it clear of the app's floating Feedback button. */}
+        <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-end gap-2 border-t bg-background/95 px-1 py-3 pr-40 backdrop-blur supports-backdrop-filter:bg-background/80">
+          {unnamed ? (
+            <span className="mr-auto text-xs text-destructive">
+              {t("leads.settings_stage_needs_name")}
+            </span>
+          ) : (
+            dirty && (
+              <span className="mr-auto text-xs text-muted-foreground">
+                {t("leads.settings_unsaved")}
+              </span>
+            )
           )}
           <Button variant="outline" onClick={() => setDraft(saved)} disabled={!dirty || saving}>
             {t("common.cancel")}
