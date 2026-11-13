@@ -59,9 +59,9 @@ Track time against projects and turn unbilled hours into draft invoices.
   Requires invoice creation permission. Entries are marked billed and linked
   to the invoice.
 
-## Leads
+## CRM
 
-Lives in its own repo, [heyronmar/inkvoice-plugins](https://github.com/heyronmar/inkvoice-plugins),
+Formerly "Leads". Lives in its own repo, [heyronmar/inkvoice-plugins](https://github.com/heyronmar/inkvoice-plugins),
 mounted at `packages/inkvoice-plugins` (a git submodule). See its README.
 
 ## API

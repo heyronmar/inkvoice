@@ -13,7 +13,7 @@ import { PluginsSettingsTab } from "./PluginsSettingsTab";
 
 // Official plugins, each registering its surface on import.
 // Plugins from heyronmar/inkvoice-plugins (git submodule at packages/inkvoice-plugins).
-import "../../../inkvoice-plugins/plugins/leads/frontend";
+import "../../../inkvoice-plugins/plugins/crm/frontend";
 import "./time-tracker";
 
 installPluginNavGate();

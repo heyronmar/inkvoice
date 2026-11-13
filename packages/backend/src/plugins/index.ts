@@ -3,5 +3,5 @@
 // runPluginMigrations() and route mounting.
 
 // Plugins from heyronmar/inkvoice-plugins (git submodule at packages/inkvoice-plugins).
-import "../../../inkvoice-plugins/plugins/leads/backend";
+import "../../../inkvoice-plugins/plugins/crm/backend";
 import "./time-tracker";
