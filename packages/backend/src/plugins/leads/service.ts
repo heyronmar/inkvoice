@@ -14,6 +14,7 @@ import { getDb } from "../../database/connection";
 import { createCustomer, getCustomer } from "../../services/customer.service";
 import { todayIso } from "../../utils/date";
 import { isPluginEnabled } from "../settings";
+import { createProject, getProject } from "../time-tracker/service";
 import {
   getLeadsConfig,
   getStage,
@@ -154,21 +155,17 @@ function moveLead(id: string, stage: string, ctx: Context, followUpGiven = false
  */
 function ensureProject(id: string): void {
   if (!isPluginEnabled("time-tracker")) return;
-  const db = getDb();
   const lead = getLead(id);
   if (!lead) return;
-  if (lead.project_id && db.query("SELECT 1 FROM tt_projects WHERE id = ?").get(lead.project_id)) {
-    return;
-  }
+  // Through Time Tracking's own service, not its tables.
+  if (lead.project_id && getProject(lead.project_id)) return;
   const converted = convertLead(id);
   if (!converted) return;
-  const projectId = crypto.randomBytes(16).toString("hex");
-  db.run("INSERT INTO tt_projects (id, name, customer_id) VALUES (?, ?, ?)", [
-    projectId,
-    lead.company || lead.name,
-    converted.customer_id,
-  ]);
-  db.run("UPDATE ld_leads SET project_id = ? WHERE id = ?", [projectId, id]);
+  const project = createProject({
+    name: lead.company || lead.name,
+    customer_id: converted.customer_id,
+  });
+  getDb().run("UPDATE ld_leads SET project_id = ? WHERE id = ?", [project.id, id]);
 }
 
 // ── Quote events ────────────────────────────────────────────────────────────
