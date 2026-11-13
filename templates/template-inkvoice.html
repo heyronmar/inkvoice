@@ -325,6 +325,12 @@
             {{#due_date}}
             <div>{{#is_quote}}Valid until{{/is_quote}}{{^is_quote}}Due date{{/is_quote}}: {{due_date}}</div>
             {{/due_date}}
+            {{#service_date}}
+            <div>Service date: {{service_date}}</div>
+            {{/service_date}}
+            {{#service_period}}
+            <div>Service period: {{service_period.start}} to {{service_period.end}}</div>
+            {{/service_period}}
             {{#customer.tax_id}}<div>{{#nz}}Customer GST No.{{/nz}}{{^nz}}Customer tax ID{{/nz}}: {{customer.tax_id}}</div>{{/customer.tax_id}}
           </div>
         </div>
@@ -456,6 +462,12 @@
               <td>&minus;{{formatted_discount}}</td>
             </tr>
             {{/has_discount}}
+            {{#has_credit_discount}}
+            <tr>
+              <td>Discount</td>
+              <td>+{{formatted_discount}}</td>
+            </tr>
+            {{/has_credit_discount}}
             {{#tax_summary}}
             <tr>
               <td>{{name}} ({{rate}}%)</td>

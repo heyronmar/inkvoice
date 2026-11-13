@@ -1154,6 +1154,27 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 34,
+    name: "vat_category_reduced_rate",
+    up: (db) => {
+      // The German 7 % preset was seeded with VAT category "AA", which is not
+      // in the EN 16931 code list, so e-invoices with it failed validation
+      // (BR-CL-17/18). A reduced rate is standard rated ("S") at 7 %.
+      db.run("UPDATE tax_definitions SET category_code = 'S' WHERE category_code = 'AA'");
+    },
+  },
+  {
+    version: 35,
+    name: "invoice_service_date",
+    up: (db) => {
+      // The date of supply (Leistungsdatum, § 14 Abs. 4 Nr. 6 UStG), as ISO
+      // dates: one date (EN 16931 BT-72) or a period (BG-14, BT-73/BT-74).
+      addColumnIfMissing(db, "invoices", "service_date", "TEXT");
+      addColumnIfMissing(db, "invoices", "service_period_start", "TEXT");
+      addColumnIfMissing(db, "invoices", "service_period_end", "TEXT");
+    },
+  },
 ];
 
 export const LATEST_MIGRATION_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;
