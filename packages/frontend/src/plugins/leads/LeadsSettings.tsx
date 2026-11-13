@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
+import { Hint, TooltipProvider } from "@/components/ui/tooltip";
 import { useTranslation } from "@/i18n";
 import { cn } from "@/lib/utils";
 import {
@@ -144,99 +145,101 @@ export default function LeadsSettings() {
   });
 
   return (
-    <div className="space-y-6">
-      <Section title={t("leads.settings_stages")} hint={t("leads.settings_stages_hint")}>
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-          <SortableContext items={open.map((s) => s.id)} strategy={verticalListSortingStrategy}>
-            <div className="space-y-2">
-              {open.map((s) => (
-                <StageRow
-                  key={s.id}
-                  {...rowProps(s)}
-                  // Keep at least one working stage.
-                  onRemove={open.length > 1 ? () => removeStage(s.id) : undefined}
-                />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button variant="outline" onClick={addStage} disabled={atLimit}>
-            <Plus className="h-4 w-4" /> {t("leads.settings_add_stage")}
-          </Button>
-          <span className="text-xs text-muted-foreground">
-            {t("leads.settings_stage_limit", {
-              count: String(open.length),
-              max: String(MAX_OPEN_STAGES),
-            })}
-          </span>
-        </div>
-        <div className="space-y-2">
-          {closed.map((s) => (
-            <StageRow key={s.id} {...rowProps(s)} locked />
-          ))}
-        </div>
-      </Section>
+    <TooltipProvider>
+      <div className="space-y-6">
+        <Section title={t("leads.settings_stages")} hint={t("leads.settings_stages_hint")}>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+            <SortableContext items={open.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+              <div className="space-y-2">
+                {open.map((s) => (
+                  <StageRow
+                    key={s.id}
+                    {...rowProps(s)}
+                    // Keep at least one working stage.
+                    onRemove={open.length > 1 ? () => removeStage(s.id) : undefined}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="outline" onClick={addStage} disabled={atLimit}>
+              <Plus className="h-4 w-4" /> {t("leads.settings_add_stage")}
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              {t("leads.settings_stage_limit", {
+                count: String(open.length),
+                max: String(MAX_OPEN_STAGES),
+              })}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {closed.map((s) => (
+              <StageRow key={s.id} {...rowProps(s)} locked />
+            ))}
+          </div>
+        </Section>
 
-      <Section title={t("leads.settings_sources")} hint={t("leads.settings_sources_hint")}>
-        <div className="flex flex-wrap gap-2">
-          {draft.sources.map((s) => (
-            <Badge key={s} variant="secondary" className="h-7 gap-1 pr-1 text-sm font-normal">
-              {sourceLabel(s)}
-              <button
-                type="button"
-                className="rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
-                aria-label={`${t("common.delete")}: ${sourceLabel(s)}`}
-                onClick={() =>
-                  setDraft((d) => ({ ...d, sources: d.sources.filter((x) => x !== s) }))
+        <Section title={t("leads.settings_sources")} hint={t("leads.settings_sources_hint")}>
+          <div className="flex flex-wrap gap-2">
+            {draft.sources.map((s) => (
+              <Badge key={s} variant="secondary" className="h-7 gap-1 pr-1 text-sm font-normal">
+                {sourceLabel(s)}
+                <button
+                  type="button"
+                  className="rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
+                  aria-label={`${t("common.delete")}: ${sourceLabel(s)}`}
+                  onClick={() =>
+                    setDraft((d) => ({ ...d, sources: d.sources.filter((x) => x !== s) }))
+                  }
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </Badge>
+            ))}
+          </div>
+          <div className="flex max-w-sm gap-2">
+            <Input
+              value={newSource}
+              maxLength={50}
+              placeholder={t("leads.settings_source_placeholder")}
+              aria-label={t("leads.settings_source_placeholder")}
+              onChange={(e) => setNewSource(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addSource();
                 }
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </Badge>
-          ))}
-        </div>
-        <div className="flex max-w-sm gap-2">
-          <Input
-            value={newSource}
-            maxLength={50}
-            placeholder={t("leads.settings_source_placeholder")}
-            aria-label={t("leads.settings_source_placeholder")}
-            onChange={(e) => setNewSource(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                addSource();
-              }
-            }}
-          />
-          <Button variant="outline" onClick={addSource} disabled={!newSource.trim()}>
-            <Plus className="h-4 w-4" /> {t("leads.settings_add")}
+              }}
+            />
+            <Button variant="outline" onClick={addSource} disabled={!newSource.trim()}>
+              <Plus className="h-4 w-4" /> {t("leads.settings_add")}
+            </Button>
+          </div>
+        </Section>
+
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {unnamed && (
+            <span className="text-xs text-destructive">{t("leads.settings_stage_needs_name")}</span>
+          )}
+          <Button variant="outline" onClick={() => setDraft(saved)} disabled={!dirty || saving}>
+            {t("common.cancel")}
+          </Button>
+          <Button onClick={save} disabled={!dirty || saving || unnamed}>
+            {saving ? t("common.saving") : t("common.save")}
           </Button>
         </div>
-      </Section>
 
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {unnamed && (
-          <span className="text-xs text-destructive">{t("leads.settings_stage_needs_name")}</span>
-        )}
-        <Button variant="outline" onClick={() => setDraft(saved)} disabled={!dirty || saving}>
-          {t("common.cancel")}
-        </Button>
-        <Button onClick={save} disabled={!dirty || saving || unnamed}>
-          {saving ? t("common.saving") : t("common.save")}
-        </Button>
+        <StageAutomationsDialog
+          open={automating !== null}
+          onOpenChange={(o) => !o && setAutomating(null)}
+          config={draft}
+          stageId={automating}
+          // Changes join the draft and are saved with the rest of the page.
+          onApply={setDraft}
+        />
       </div>
-
-      <StageAutomationsDialog
-        open={automating !== null}
-        onOpenChange={(o) => !o && setAutomating(null)}
-        config={draft}
-        stageId={automating}
-        // Changes join the draft and are saved with the rest of the page.
-        onApply={setDraft}
-      />
-    </div>
+    </TooltipProvider>
   );
 }
 
@@ -291,16 +294,18 @@ function StageRow({
           <Lock className="h-4 w-4" aria-label={t("leads.settings_stage_locked")} />
         </span>
       ) : (
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="cursor-grab touch-none active:cursor-grabbing"
-          aria-label={`${t("leads.settings_reorder")}: ${name}`}
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical />
-        </Button>
+        <Hint label={t("leads.settings_reorder")}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="cursor-grab touch-none active:cursor-grabbing"
+            aria-label={`${t("leads.settings_reorder")}: ${name}`}
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical />
+          </Button>
+        </Hint>
       )}
       <ColorPicker
         value={stage.color}
@@ -320,16 +325,23 @@ function StageRow({
         {t("leads.settings_stage_leads", { count: String(leads) })}
       </span>
       <div className="ml-auto flex items-center gap-1">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onAutomate}
-          aria-label={`${t("leads.automations")}: ${name}`}
-          title={t("leads.automations")}
+        <Hint
+          label={
+            automations > 0
+              ? t("leads.automations_count", { count: String(automations) })
+              : t("leads.automations_set")
+          }
         >
-          <Zap className={cn("h-4 w-4", automations > 0 && "fill-amber-400 text-amber-500")} />
-          {automations > 0 && <span className="tabular-nums">{automations}</span>}
-        </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onAutomate}
+            aria-label={`${t("leads.automations")}: ${name}`}
+          >
+            <Zap className={cn("h-4 w-4", automations > 0 && "fill-amber-400 text-amber-500")} />
+            {automations > 0 && <span className="tabular-nums">{automations}</span>}
+          </Button>
+        </Hint>
         {locked ? (
           <span className="px-2 text-xs text-muted-foreground">
             {t("leads.settings_stage_locked")}
@@ -347,22 +359,26 @@ function StageRow({
               checked={!stage.hidden}
               onCheckedChange={(on) => onChange({ hidden: !on })}
             />
-            <Button
-              variant="ghost"
-              size="icon-sm"
+            <Hint
               disabled={!onRemove || leads > 0}
-              onClick={onRemove}
-              aria-label={`${t("common.delete")}: ${name}`}
-              title={
+              label={
                 leads > 0
                   ? t("leads.settings_stage_not_empty")
                   : !onRemove
                     ? t("leads.settings_stage_keep_one")
-                    : t("common.delete")
+                    : t("leads.settings_stage_delete")
               }
             >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                disabled={!onRemove || leads > 0}
+                onClick={onRemove}
+                aria-label={`${t("common.delete")}: ${name}`}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </Hint>
           </>
         )}
       </div>
@@ -379,14 +395,15 @@ function ColorPicker({
   label: string;
   onChange: (color: StageColor) => void;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={<Button variant="ghost" size="icon-sm" aria-label={label} title={label} />}
-      >
-        <span className={cn("h-4 w-4 rounded-full", STAGE_SWATCHES[value])} />
-      </PopoverTrigger>
+      <Hint label={t("leads.settings_stage_color")}>
+        <PopoverTrigger render={<Button variant="ghost" size="icon-sm" aria-label={label} />}>
+          <span className={cn("h-4 w-4 rounded-full", STAGE_SWATCHES[value])} />
+        </PopoverTrigger>
+      </Hint>
       <PopoverContent className="w-auto p-2" align="start">
         <div className="grid grid-cols-4 gap-1.5">
           {STAGE_COLORS.map((c) => (

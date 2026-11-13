@@ -55,6 +55,7 @@ import {
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Hint, TooltipProvider } from "@/components/ui/tooltip";
 import { useCan } from "@/hooks/use-can";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useTranslation } from "@/i18n";
@@ -196,79 +197,33 @@ export default function LeadsPage() {
   };
 
   const renderActions = (l: Lead, compact = false) => {
-    const size = compact ? "icon-xs" : "icon";
+    const action = (label: string, Icon: typeof FileText, onClick: () => void) => (
+      <Hint label={label}>
+        <Button
+          variant="ghost"
+          size={compact ? "icon-xs" : "icon"}
+          aria-label={label}
+          onClick={onClick}
+        >
+          <Icon className="h-4 w-4" />
+        </Button>
+      </Hint>
+    );
     return (
       <>
-        {l.quote_id && l.quote_number ? (
-          // It already has a quote, so open that rather than starting another.
-          <Button
-            variant="ghost"
-            size={size}
-            title={t("leads.open_quote", { number: l.quote_number })}
-            aria-label={t("leads.open_quote", { number: l.quote_number })}
-            onClick={() => navigate(`/quotes/${l.quote_id}`)}
-          >
-            <FileText className="h-4 w-4" />
-          </Button>
-        ) : (
-          canQuote &&
-          l.stage !== "won" && (
-            <Button
-              variant="ghost"
-              size={size}
-              title={t("leads.create_quote")}
-              aria-label={t("leads.create_quote")}
-              onClick={() => createQuote(l)}
-            >
-              <FilePlus className="h-4 w-4" />
-            </Button>
-          )
-        )}
-        {l.customer_id ? (
-          <Button
-            variant="ghost"
-            size={size}
-            title={t("leads.view_customer")}
-            aria-label={t("leads.view_customer")}
-            onClick={() => navigate(`/customers/${l.customer_id}`)}
-          >
-            <Users className="h-4 w-4" />
-          </Button>
-        ) : (
-          canCreate && (
-            <Button
-              variant="ghost"
-              size={size}
-              title={t("leads.convert")}
-              aria-label={t("leads.convert")}
-              onClick={() => convert(l)}
-            >
-              <UserPlus className="h-4 w-4" />
-            </Button>
-          )
-        )}
-        {canEdit && (
-          <Button
-            variant="ghost"
-            size={size}
-            title={t("common.edit")}
-            aria-label={t("common.edit")}
-            onClick={() => openEdit(l)}
-          >
-            <Pencil className="h-4 w-4" />
-          </Button>
-        )}
-        {canDelete && (
-          <Button
-            variant="ghost"
-            size={size}
-            title={t("common.delete")}
-            aria-label={t("common.delete")}
-            onClick={() => setDeleteId(l.id)}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        )}
+        {l.quote_id && l.quote_number
+          ? // It already has a quote, so open that rather than starting another.
+            action(t("leads.open_quote", { number: l.quote_number }), FileText, () =>
+              navigate(`/quotes/${l.quote_id}`),
+            )
+          : canQuote &&
+            l.stage !== "won" &&
+            action(t("leads.create_quote"), FilePlus, () => createQuote(l))}
+        {l.customer_id
+          ? action(t("leads.view_customer"), Users, () => navigate(`/customers/${l.customer_id}`))
+          : canCreate && action(t("leads.convert"), UserPlus, () => convert(l))}
+        {canEdit && action(t("common.edit"), Pencil, () => openEdit(l))}
+        {canDelete && action(t("common.delete"), Trash2, () => setDeleteId(l.id))}
       </>
     );
   };
@@ -290,223 +245,227 @@ export default function LeadsPage() {
   const colCount = 7;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight">{t("leads.title")}</h1>
-          {dueCount > 0 && (
-            <Badge variant="destructive">{t("leads.follow_ups_due", { count: dueCount })}</Badge>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <DateRangeFilter value={dateRange} onChange={setDateRange} />
-          {can("customers", "export") && (
-            <Button
-              variant="outline"
-              onClick={() => window.open(leadsApi.exportUrl(filters), "_blank")}
-            >
-              <Download className="h-4 w-4 mr-2" /> {t("common.export_csv")}
-            </Button>
-          )}
-          <div className="inline-flex h-8 items-center gap-0.5 rounded-lg border border-border bg-background p-0.5">
-            {(
-              [
-                ["list", List, t("leads.view_list")],
-                ["board", Kanban, t("leads.view_board")],
-              ] as const
-            ).map(([value, Icon, label]) => (
-              <Button
-                key={value}
-                variant={view === value ? "secondary" : "ghost"}
-                className="h-full w-8 px-0"
-                title={label}
-                aria-label={label}
-                aria-pressed={view === value}
-                onClick={() => setView(value)}
-              >
-                <Icon />
-              </Button>
-            ))}
+    <TooltipProvider>
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold tracking-tight">{t("leads.title")}</h1>
+            {dueCount > 0 && (
+              <Badge variant="destructive">{t("leads.follow_ups_due", { count: dueCount })}</Badge>
+            )}
           </div>
-          {canCreate && (
-            <Button onClick={openNew}>
-              <Plus className="h-4 w-4 mr-2" /> {t("leads.add_lead")}
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            <DateRangeFilter value={dateRange} onChange={setDateRange} />
+            {can("customers", "export") && (
+              <Button
+                variant="outline"
+                onClick={() => window.open(leadsApi.exportUrl(filters), "_blank")}
+              >
+                <Download className="h-4 w-4 mr-2" /> {t("common.export_csv")}
+              </Button>
+            )}
+            <div className="inline-flex h-8 items-center gap-0.5 rounded-lg border border-border bg-background p-0.5">
+              {(
+                [
+                  ["list", List, t("leads.view_list")],
+                  ["board", Kanban, t("leads.view_board")],
+                ] as const
+              ).map(([value, Icon, label]) => (
+                <Hint key={value} label={label}>
+                  <Button
+                    variant={view === value ? "secondary" : "ghost"}
+                    className="h-full w-8 px-0"
+                    aria-label={label}
+                    aria-pressed={view === value}
+                    onClick={() => setView(value)}
+                  >
+                    <Icon />
+                  </Button>
+                </Hint>
+              ))}
+            </div>
+            {canCreate && (
+              <Button onClick={openNew}>
+                <Plus className="h-4 w-4 mr-2" /> {t("leads.add_lead")}
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
 
-      <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-        {view === "list" && (
-          <Tabs value={stage} onValueChange={(v) => setStage(v as string)}>
-            <TabsList>
-              <TabsTrigger value="all">
-                {t("leads.tab_all")} <span className="ml-1 text-muted-foreground">{total}</span>
-              </TabsTrigger>
-              {stages.map((s) => (
-                <TabsTrigger key={s} value={s}>
-                  {stageLabel(s)}
-                  <span className="ml-1 text-muted-foreground">{counts[s] ?? 0}</span>
+        <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+          {view === "list" && (
+            <Tabs value={stage} onValueChange={(v) => setStage(v as string)}>
+              <TabsList>
+                <TabsTrigger value="all">
+                  {t("leads.tab_all")} <span className="ml-1 text-muted-foreground">{total}</span>
                 </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        )}
-        <div className="relative w-full max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder={t("leads.search_placeholder")}
-            aria-label={t("common.search")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
+                {stages.map((s) => (
+                  <TabsTrigger key={s} value={s}>
+                    {stageLabel(s)}
+                    <span className="ml-1 text-muted-foreground">{counts[s] ?? 0}</span>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          )}
+          <div className="relative w-full max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder={t("leads.search_placeholder")}
+              aria-label={t("common.search")}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+        </div>
+
+        {view === "board" ? (
+          <LeadBoard
+            leads={leads}
+            stages={stages}
+            canEdit={canEdit}
+            currency={currency}
+            stageLabel={stageLabel}
+            stageStyle={(id) => stageStyle(config, id)}
+            automations={(id) => {
+              const s = config.stages.find((x) => x.id === id);
+              return s ? automationCount(config, s) : 0;
+            }}
+            onAutomate={isAdmin ? setAutomating : undefined}
+            quoteChip={quoteChip}
+            followUp={followUp}
+            renderActions={renderActions}
+            onOpen={openEdit}
+            onMove={changeStage}
           />
-        </div>
-      </div>
-
-      {view === "board" ? (
-        <LeadBoard
-          leads={leads}
-          stages={stages}
-          canEdit={canEdit}
-          currency={currency}
-          stageLabel={stageLabel}
-          stageStyle={(id) => stageStyle(config, id)}
-          automations={(id) => {
-            const s = config.stages.find((x) => x.id === id);
-            return s ? automationCount(config, s) : 0;
-          }}
-          onAutomate={isAdmin ? setAutomating : undefined}
-          quoteChip={quoteChip}
-          followUp={followUp}
-          renderActions={renderActions}
-          onOpen={openEdit}
-          onMove={changeStage}
-        />
-      ) : (
-        <div className="glass-table-wrapper">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableCell className="font-medium text-sm">{t("leads.col_name")}</TableCell>
-                <TableCell className="font-medium text-sm">{t("leads.col_contact")}</TableCell>
-                <TableCell className="font-medium text-sm">{t("leads.col_source")}</TableCell>
-                <TableCell className="font-medium text-sm text-right">
-                  {t("leads.col_value")}
-                </TableCell>
-                <TableCell className="font-medium text-sm">{t("leads.col_stage")}</TableCell>
-                <TableCell className="font-medium text-sm">{t("leads.col_follow_up")}</TableCell>
-                <TableCell className="w-[160px] font-medium text-sm text-muted-foreground">
-                  {t("common.actions")}
-                </TableCell>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {leads.length === 0 && (
+        ) : (
+          <div className="glass-table-wrapper">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={colCount} className="p-0">
-                    <EmptyState
-                      icon={Target}
-                      title={t("leads.empty_title")}
-                      description={t("leads.empty_description")}
-                      actionLabel={t("leads.add_lead")}
-                      onAction={canCreate ? openNew : undefined}
-                    />
+                  <TableCell className="font-medium text-sm">{t("leads.col_name")}</TableCell>
+                  <TableCell className="font-medium text-sm">{t("leads.col_contact")}</TableCell>
+                  <TableCell className="font-medium text-sm">{t("leads.col_source")}</TableCell>
+                  <TableCell className="font-medium text-sm text-right">
+                    {t("leads.col_value")}
+                  </TableCell>
+                  <TableCell className="font-medium text-sm">{t("leads.col_stage")}</TableCell>
+                  <TableCell className="font-medium text-sm">{t("leads.col_follow_up")}</TableCell>
+                  <TableCell className="w-[160px] font-medium text-sm text-muted-foreground">
+                    {t("common.actions")}
                   </TableCell>
                 </TableRow>
-              )}
-              {leads.map((l) => (
-                <TableRow
-                  key={l.id}
-                  className={cn(
-                    "transition-colors",
-                    canEdit && "cursor-pointer hover:bg-accent/50",
-                    l.stage === "lost" && "opacity-60",
-                  )}
-                  onClick={canEdit ? () => openEdit(l) : undefined}
-                >
-                  <TableCell>
-                    <div className="font-medium">{l.name}</div>
-                    {l.company && <div className="text-xs text-muted-foreground">{l.company}</div>}
-                    {quoteChip(l)}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    <div>{l.email || "-"}</div>
-                    {l.phone && <div className="text-xs">{l.phone}</div>}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {l.source ? sourceLabel(l.source) : "-"}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {l.value != null ? formatCurrency(l.value, currency) : "-"}
-                  </TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    {canEdit ? (
-                      <Select
-                        value={l.stage}
-                        onValueChange={(v) => v && v !== l.stage && changeStage(l, v)}
-                      >
-                        <SelectTrigger
-                          className={cn(
-                            "border-transparent font-medium",
-                            stageStyle(config, l.stage),
-                          )}
-                          aria-label={t("leads.col_stage")}
-                        >
-                          <SelectValue>{stageLabel(l.stage)}</SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {stages.map((s) => (
-                            <SelectItem key={s} value={s}>
-                              {stageLabel(s)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Badge className={stageStyle(config, l.stage)}>{stageLabel(l.stage)}</Badge>
+              </TableHeader>
+              <TableBody>
+                {leads.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={colCount} className="p-0">
+                      <EmptyState
+                        icon={Target}
+                        title={t("leads.empty_title")}
+                        description={t("leads.empty_description")}
+                        actionLabel={t("leads.add_lead")}
+                        onAction={canCreate ? openNew : undefined}
+                      />
+                    </TableCell>
+                  </TableRow>
+                )}
+                {leads.map((l) => (
+                  <TableRow
+                    key={l.id}
+                    className={cn(
+                      "transition-colors",
+                      canEdit && "cursor-pointer hover:bg-accent/50",
+                      l.stage === "lost" && "opacity-60",
                     )}
-                  </TableCell>
-                  <TableCell className="text-sm tabular-nums">
-                    {followUp(l) ?? <span className="text-muted-foreground">-</span>}
-                  </TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <div className="flex gap-1">{renderActions(l)}</div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+                    onClick={canEdit ? () => openEdit(l) : undefined}
+                  >
+                    <TableCell>
+                      <div className="font-medium">{l.name}</div>
+                      {l.company && (
+                        <div className="text-xs text-muted-foreground">{l.company}</div>
+                      )}
+                      {quoteChip(l)}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      <div>{l.email || "-"}</div>
+                      {l.phone && <div className="text-xs">{l.phone}</div>}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {l.source ? sourceLabel(l.source) : "-"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {l.value != null ? formatCurrency(l.value, currency) : "-"}
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      {canEdit ? (
+                        <Select
+                          value={l.stage}
+                          onValueChange={(v) => v && v !== l.stage && changeStage(l, v)}
+                        >
+                          <SelectTrigger
+                            className={cn(
+                              "border-transparent font-medium",
+                              stageStyle(config, l.stage),
+                            )}
+                            aria-label={t("leads.col_stage")}
+                          >
+                            <SelectValue>{stageLabel(l.stage)}</SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {stages.map((s) => (
+                              <SelectItem key={s} value={s}>
+                                {stageLabel(s)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Badge className={stageStyle(config, l.stage)}>{stageLabel(l.stage)}</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm tabular-nums">
+                      {followUp(l) ?? <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <div className="flex gap-1">{renderActions(l)}</div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
 
-      <LeadDialog
-        open={dialogOpen}
-        lead={editing}
-        config={config}
-        stages={stages}
-        onOpenChange={setDialogOpen}
-        onSaved={fetchLeads}
-      />
+        <LeadDialog
+          open={dialogOpen}
+          lead={editing}
+          config={config}
+          stages={stages}
+          onOpenChange={setDialogOpen}
+          onSaved={fetchLeads}
+        />
 
-      <StageAutomationsDialog
-        open={automating !== null}
-        onOpenChange={(o) => !o && setAutomating(null)}
-        config={config}
-        stageId={automating}
-        onApply={saveAutomations}
-      />
+        <StageAutomationsDialog
+          open={automating !== null}
+          onOpenChange={(o) => !o && setAutomating(null)}
+          config={config}
+          stageId={automating}
+          onApply={saveAutomations}
+        />
 
-      <ConfirmDialog
-        open={deleteId !== null}
-        onOpenChange={(open) => !open && setDeleteId(null)}
-        title={t("leads.delete_title")}
-        description={t("leads.delete_description")}
-        confirmLabel={t("common.delete")}
-        variant="destructive"
-        onConfirm={handleDelete}
-      />
-    </div>
+        <ConfirmDialog
+          open={deleteId !== null}
+          onOpenChange={(open) => !open && setDeleteId(null)}
+          title={t("leads.delete_title")}
+          description={t("leads.delete_description")}
+          confirmLabel={t("common.delete")}
+          variant="destructive"
+          onConfirm={handleDelete}
+        />
+      </div>
+    </TooltipProvider>
   );
 }
 
@@ -792,15 +751,22 @@ function BoardColumn({
         <div className="flex items-center gap-1">
           {total && <span className="text-xs text-muted-foreground tabular-nums">{total}</span>}
           {onAutomate && (
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={onAutomate}
-              title={t("leads.automations")}
-              aria-label={`${t("leads.automations")}: ${title}`}
+            <Hint
+              label={
+                automations > 0
+                  ? t("leads.automations_count", { count: String(automations) })
+                  : t("leads.automations_set")
+              }
             >
-              <Zap className={cn(automations > 0 && "fill-amber-400 text-amber-500")} />
-            </Button>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={onAutomate}
+                aria-label={`${t("leads.automations")}: ${title}`}
+              >
+                <Zap className={cn(automations > 0 && "fill-amber-400 text-amber-500")} />
+              </Button>
+            </Hint>
           )}
         </div>
       </div>
