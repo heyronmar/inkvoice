@@ -15,7 +15,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useTranslation } from "@/i18n";
 
-export function FeedbackButton() {
+/** The Feedback entry in the sidebar's Admin section, styled like its links. */
+export function FeedbackButton({ collapsed = false }: { collapsed?: boolean }) {
   const { t } = useTranslation();
   const location = useLocation();
   const [open, setOpen] = useState(false);
@@ -44,15 +45,15 @@ export function FeedbackButton() {
 
   return (
     <>
-      <Button
+      <button
         type="button"
         onClick={() => setOpen(true)}
         aria-label={t("feedback.button")}
-        className="fixed bottom-4 right-4 z-40 h-10 gap-2 rounded-md shadow-[0_10px_30px_-10px_var(--primary)] hover:shadow-[0_14px_36px_-8px_var(--primary)] hover:-translate-y-0.5 transition-all"
+        className="flex w-full items-center gap-2.5 px-3 py-1.5 rounded-md text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
-        <MessageSquare className="h-4 w-4" />
-        {t("feedback.button")}
-      </Button>
+        <MessageSquare className="h-4 w-4 shrink-0" />
+        {!collapsed && <span>{t("feedback.button")}</span>}
+      </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>

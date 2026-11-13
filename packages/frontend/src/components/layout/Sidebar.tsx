@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import type { ComponentType } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
+import { FeedbackButton } from "@/components/FeedbackButton";
 import { InkvoiceIcon, InkvoiceLogo } from "@/components/InkvoiceLogo";
 import {
   DropdownMenu,
@@ -196,6 +197,7 @@ export function Sidebar({ collapsed }: { collapsed?: boolean }) {
                   )}
                 </NavLink>
               ))}
+              <FeedbackButton collapsed={collapsed} />
             </div>
           </div>
         )}

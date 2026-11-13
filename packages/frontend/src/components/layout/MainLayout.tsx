@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Outlet } from "react-router-dom";
 import { CommandPalette } from "@/components/CommandPalette";
-import { FeedbackButton } from "@/components/FeedbackButton";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { usePersistentState } from "@/hooks/use-persistent-state";
@@ -58,7 +57,6 @@ export function MainLayout() {
           <Outlet />
         </main>
       </div>
-      <FeedbackButton />
       <CommandPalette />
     </div>
   );
