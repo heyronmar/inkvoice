@@ -550,9 +550,7 @@ function LeadDialog({
       next_follow_up: lead?.next_follow_up ?? "",
       notes: lead?.notes ?? "",
     });
-    // firstStage only changes with the config, which re-opens the dialog.
-    // biome-ignore lint/correctness/useExhaustiveDependencies: see above
-  }, [open, lead]);
+  }, [open, lead, firstStage]);
 
   const set = (key: string) => (value: string) => setForm((f) => ({ ...f, [key]: value }));
 

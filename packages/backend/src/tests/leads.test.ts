@@ -7,7 +7,7 @@ import { runMigrations } from "../database/migrations";
 import { seed } from "../database/seed";
 import "../plugins"; // registers leads so its migrations run
 import { getDb } from "../database/connection";
-import { defaultLeadsConfig, getLeadsConfig, saveLeadsConfig } from "../plugins/leads/config";
+import { defaultLeadsConfig, saveLeadsConfig } from "../plugins/leads/config";
 import {
   convertLead,
   countByStage,

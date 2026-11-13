@@ -59,7 +59,9 @@ export default function LeadsSettings() {
   const { sourceLabel } = useLeadLabels(draft);
 
   useEffect(() => setDraft(saved), [saved]);
-  // Lead counts per stage: a stage can only be removed once it's empty.
+  // Lead counts per stage, refreshed after each save: a stage can only be
+  // removed once it's empty.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refetch when the saved settings change
   useEffect(() => {
     leadsApi
       .list({})
