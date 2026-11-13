@@ -3,30 +3,33 @@ import { getDb } from "../database/connection";
 import type { Customer } from "../types/customer";
 import { cashDiscountDeadline, cashDiscountOn, hasCashDiscount } from "../utils/cash-discount";
 import { formatCurrency } from "../utils/currency";
+import { formatDateStr } from "../utils/date";
 import { buildEpcPayload } from "../utils/epc-qr";
 import { escapeMultiline, inlineAddress } from "../utils/html";
+import { localizePaymentTerms } from "../utils/payment-terms";
 import { qrToDataUri } from "../utils/qr-code";
 import { isNzBusiness } from "../utils/region-terms";
+import { type StoredTaxLine, taxByRate } from "../utils/tax-calculator";
 import { getInvoice } from "./invoice.service";
 import { listPayments } from "./payment.service";
 import { getQuote } from "./quote.service";
 import { getAllSettings } from "./settings.service";
 import { getDefaultTemplate, getTemplate } from "./template.service";
 
-function formatDateStr(dateStr: string, dateFormat?: string, localeOverride?: string): string {
-  const d = new Date(dateStr);
-  if (dateFormat && !localeOverride) {
-    const yyyy = d.getFullYear().toString();
-    const mm = (d.getMonth() + 1).toString().padStart(2, "0");
-    const dd = d.getDate().toString().padStart(2, "0");
-    // Accept both "DD/MM/YYYY" and the "dd/MM/yyyy" spelling the region presets used.
-    return dateFormat.toUpperCase().replace("YYYY", yyyy).replace("MM", mm).replace("DD", dd);
+/**
+ * The line tax amounts are before the document discount; the discount lowers
+ * each rate's VAT, so the summary shows the VAT actually charged.
+ */
+function applyDiscountToTaxSummary(
+  taxMap: Map<string, { amount: number }>,
+  items: StoredTaxLine[],
+  discountAmount: number | null | undefined,
+): void {
+  if (!discountAmount) return;
+  for (const { rate, tax } of taxByRate(items, discountAmount)) {
+    const entry = taxMap.get(`${rate}`);
+    if (entry) entry.amount = tax;
   }
-  return d.toLocaleDateString(localeOverride || "en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
 }
 
 /** Free-form bank details, led by the account number when one is set. */
@@ -162,6 +165,7 @@ export function buildInvoiceContext(invoiceId: string) {
       }
     }
   }
+  applyDiscountToTaxSummary(taxMap, invoice.items, invoice.discount_amount);
 
   const currency = invoice.currency || settings.currency || "USD";
   const dateFormat = settings.date_format || undefined;
@@ -176,6 +180,17 @@ export function buildInvoiceContext(invoiceId: string) {
     invoice_number: invoice.invoice_number,
     issue_date: formatDateStr(invoice.issue_date, dateFormat, localeOverride),
     due_date: invoice.due_date ? formatDateStr(invoice.due_date, dateFormat, localeOverride) : null,
+    // Date of supply (Leistungsdatum): a single date and/or a period.
+    service_date: invoice.service_date
+      ? formatDateStr(invoice.service_date, dateFormat, localeOverride)
+      : null,
+    service_period:
+      invoice.service_period_start && invoice.service_period_end
+        ? {
+            start: formatDateStr(invoice.service_period_start, dateFormat, localeOverride),
+            end: formatDateStr(invoice.service_period_end, dateFormat, localeOverride),
+          }
+        : null,
     status: invoice.status,
     company: {
       name: settings.company_name || "",
@@ -257,9 +272,12 @@ export function buildInvoiceContext(invoiceId: string) {
         }
       : null,
     formatted_subtotal: formatCurrency(invoice.subtotal, currency, numberFormat, localeOverride),
+    // Positive document discounts (invoices). Credit notes keep a separate flag
+    // so older custom templates that hardcode &minus; do not flip the sign.
     has_discount: invoice.discount_amount > 0,
+    has_credit_discount: invoice.discount_amount < 0,
     formatted_discount: formatCurrency(
-      invoice.discount_amount,
+      Math.abs(invoice.discount_amount),
       currency,
       numberFormat,
       localeOverride,
@@ -306,7 +324,7 @@ export function buildInvoiceContext(invoiceId: string) {
       reference: p.reference,
       formatted_amount: formatCurrency(p.amount, currency, numberFormat, localeOverride),
     })),
-    payment_terms: invoice.payment_terms,
+    payment_terms: localizePaymentTerms(invoice.payment_terms, locale),
     notes: invoice.notes,
     currency,
   };
@@ -387,6 +405,7 @@ export function buildQuoteContext(quoteId: string) {
         });
     }
   }
+  applyDiscountToTaxSummary(taxMap, quote.items, quote.discount_amount);
 
   const currency = quote.currency || settings.currency || "USD";
   const dateFormat = settings.date_format || undefined;

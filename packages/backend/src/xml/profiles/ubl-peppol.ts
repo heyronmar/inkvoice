@@ -60,6 +60,14 @@ export class UblPeppolProfile implements XmlProfile {
     }
     lines.push(`  <cbc:DocumentCurrencyCode>${esc(data.currency)}</cbc:DocumentCurrencyCode>`);
 
+    // Service period (BG-14)
+    if (data.service_period) {
+      lines.push(`  <cac:InvoicePeriod>`);
+      lines.push(`    <cbc:StartDate>${esc(data.service_period.start)}</cbc:StartDate>`);
+      lines.push(`    <cbc:EndDate>${esc(data.service_period.end)}</cbc:EndDate>`);
+      lines.push(`  </cac:InvoicePeriod>`);
+    }
+
     // Supplier
     lines.push(`  <cac:AccountingSupplierParty>`);
     lines.push(`    <cac:Party>`);
@@ -142,6 +150,13 @@ export class UblPeppolProfile implements XmlProfile {
     lines.push(`    </cac:Party>`);
     lines.push(`  </cac:AccountingCustomerParty>`);
 
+    // Date of supply (BT-72)
+    if (data.service_date) {
+      lines.push(`  <cac:Delivery>`);
+      lines.push(`    <cbc:ActualDeliveryDate>${esc(data.service_date)}</cbc:ActualDeliveryDate>`);
+      lines.push(`  </cac:Delivery>`);
+    }
+
     // Payment terms
     if (data.payment_terms) {
       lines.push(
@@ -149,8 +164,9 @@ export class UblPeppolProfile implements XmlProfile {
       );
     }
 
-    // Discount as allowance
-    if (data.discount_amount > 0) {
+    // Discount as allowance. On a credit note it is negative, like the
+    // lines and totals, so the document still adds up.
+    if (data.discount_amount !== 0) {
       lines.push(`  <cac:AllowanceCharge>`);
       lines.push(`    <cbc:ChargeIndicator>false</cbc:ChargeIndicator>`);
       lines.push(`    <cbc:AllowanceChargeReason>Discount</cbc:AllowanceChargeReason>`);
@@ -193,7 +209,7 @@ export class UblPeppolProfile implements XmlProfile {
     lines.push(
       `    <cbc:TaxInclusiveAmount currencyID="${esc(data.currency)}">${amt(data.total)}</cbc:TaxInclusiveAmount>`,
     );
-    if (data.discount_amount > 0) {
+    if (data.discount_amount !== 0) {
       lines.push(
         `    <cbc:AllowanceTotalAmount currencyID="${esc(data.currency)}">${amt(data.discount_amount)}</cbc:AllowanceTotalAmount>`,
       );
