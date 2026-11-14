@@ -47,14 +47,16 @@ export const timeTrackerMigrations: PluginMigration[] = [
   },
   {
     version: 2,
-    name: "time_entry_attachments",
+    name: "job_attachments",
     up: (db) => {
-      // Proof of work on a time entry: photos or PDFs, stored as BLOBs like
-      // expense receipts. Removed with their entry.
+      // Proof of work on a job (a project on a day, shared by everyone who
+      // logged time on it): photos or PDFs stored as BLOBs like expense
+      // receipts. "day" is the client's local date, YYYY-MM-DD.
       db.exec(`
-        CREATE TABLE IF NOT EXISTS tt_entry_attachments (
+        CREATE TABLE IF NOT EXISTS tt_job_attachments (
           id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-          entry_id TEXT NOT NULL REFERENCES tt_time_entries(id) ON DELETE CASCADE,
+          project_id TEXT NOT NULL REFERENCES tt_projects(id) ON DELETE CASCADE,
+          day TEXT NOT NULL,
           file_name TEXT NOT NULL,
           content_type TEXT NOT NULL,
           size INTEGER NOT NULL,
@@ -63,7 +65,7 @@ export const timeTrackerMigrations: PluginMigration[] = [
           created_at TEXT DEFAULT (datetime('now'))
         );
 
-        CREATE INDEX IF NOT EXISTS idx_tt_attachments_entry ON tt_entry_attachments(entry_id);
+        CREATE INDEX IF NOT EXISTS idx_tt_job_attachments ON tt_job_attachments(project_id, day);
       `);
     },
   },

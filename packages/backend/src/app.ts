@@ -102,7 +102,7 @@ export function createApp(options?: CreateAppOptions): Hono {
     return c.text("404 Not Found", 404);
   });
 
-  // Request body size limit (10MB). An expense receipt or time-entry
+  // Request body size limit (10MB). An expense receipt or time-tracking job
   // attachment upload may carry a full 10 MB file, so it gets 1 MB of
   // headroom for the multipart framing;
   // the route itself enforces the 10 MB file limit.
@@ -110,7 +110,7 @@ export function createApp(options?: CreateAppOptions): Hono {
     const contentLength = parseInt(c.req.header("content-length") || "0", 10);
     const fileUpload =
       /^\/api\/v1\/expenses\/[^/]+\/receipt$/.test(c.req.path) ||
-      /^\/api\/v1\/plugins\/time-tracker\/entries\/[^/]+\/attachments$/.test(c.req.path);
+      /^\/api\/v1\/plugins\/time-tracker\/jobs\/[^/]+\/[^/]+\/attachments$/.test(c.req.path);
     const limit = fileUpload ? 11 * 1024 * 1024 : 10 * 1024 * 1024;
     if (contentLength > limit) {
       return c.json({ success: false, error: "Request too large" }, 413);

@@ -88,9 +88,27 @@ routes.get("/entries", (c) => {
         billed: billedParam === undefined ? undefined : billedParam === "true",
         from: c.req.query("from") || undefined,
         to: c.req.query("to") || undefined,
+        team: c.req.query("scope") === "team",
       }),
     ),
   );
+});
+
+// --- Jobs (customer + optional project name) --------------------------------
+
+const jobSchema = z.object({
+  customer_id: z.string().min(1),
+  project_name: z.string().max(200).nullable().optional(),
+});
+
+// Any user may resolve (and so create) a customer's project, so employees can
+// start work without an admin setting projects up first.
+routes.post("/jobs", async (c) => {
+  const parsed = jobSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ success: false, error: "Invalid job" }, 400);
+  const project = svc.resolveJobProject(parsed.data.customer_id, parsed.data.project_name);
+  if (!project) return c.json({ success: false, error: "Customer not found" }, 404);
+  return c.json(ok(project));
 });
 
 routes.post("/entries", async (c) => {
@@ -129,16 +147,20 @@ routes.delete("/entries/:id", (c) => {
   }
 });
 
-// --- Attachments (proof of work) --------------------------------------------
+// --- Job attachments (proof of work) ----------------------------------------
+// A job is a project on a day (YYYY-MM-DD, the client's local date). Everyone
+// can see and add proof; only the uploader or an admin can delete it.
 
-routes.get("/entries/:id/attachments", (c) => {
-  const list = attachments.listAttachments(actor(c), c.req.param("id"));
-  if (!list) return c.json({ success: false, error: "Entry not found" }, 404);
+const jobPath = "/jobs/:projectId/:day/attachments";
+
+routes.get(jobPath, (c) => {
+  const list = attachments.listAttachments(c.req.param("projectId"), c.req.param("day"));
+  if (!list) return c.json({ success: false, error: "Job not found" }, 404);
   return c.json(ok(list));
 });
 
 // multipart/form-data with the file in a `file` field. One file per request.
-routes.post("/entries/:id/attachments", async (c) => {
+routes.post(jobPath, async (c) => {
   let body: Record<string, unknown>;
   try {
     body = await c.req.parseBody();
@@ -152,7 +174,7 @@ routes.post("/entries/:id/attachments", async (c) => {
   if (file.size > attachments.MAX_ATTACHMENT_BYTES) {
     return c.json({ success: false, error: "Attachments must be 10 MB or smaller" }, 413);
   }
-  const result = attachments.addAttachment(actor(c), c.req.param("id"), {
+  const result = attachments.addAttachment(actor(c), c.req.param("projectId"), c.req.param("day"), {
     name: file.name,
     bytes: new Uint8Array(await file.arrayBuffer()),
   });
@@ -161,8 +183,12 @@ routes.post("/entries/:id/attachments", async (c) => {
 });
 
 // The stored file, inline (for an <img> or PDF viewer); `?download=1` saves it.
-routes.get("/entries/:id/attachments/:attachmentId", (c) => {
-  const file = attachments.getAttachment(actor(c), c.req.param("id"), c.req.param("attachmentId"));
+routes.get(`${jobPath}/:attachmentId`, (c) => {
+  const file = attachments.getAttachment(
+    c.req.param("projectId"),
+    c.req.param("day"),
+    c.req.param("attachmentId"),
+  );
   if (!file) return c.json({ success: false, error: "Attachment not found" }, 404);
   const disposition = c.req.query("download") ? "attachment" : "inline";
   const asciiName = file.file_name.replace(/[^\x20-\x7e]/g, "_");
@@ -177,13 +203,22 @@ routes.get("/entries/:id/attachments/:attachmentId", (c) => {
   return c.body(file.content);
 });
 
-routes.delete("/entries/:id/attachments/:attachmentId", (c) => {
-  const removed = attachments.deleteAttachment(
+routes.delete(`${jobPath}/:attachmentId`, (c) => {
+  const result = attachments.deleteAttachment(
     actor(c),
-    c.req.param("id"),
+    c.req.param("projectId"),
+    c.req.param("day"),
     c.req.param("attachmentId"),
   );
-  if (!removed) return c.json({ success: false, error: "Attachment not found" }, 404);
+  if (result === "not_found") {
+    return c.json({ success: false, error: "Attachment not found" }, 404);
+  }
+  if (result === "forbidden") {
+    return c.json(
+      { success: false, error: "Only the person who added it or an admin can delete it" },
+      403,
+    );
+  }
   return c.json(ok({ id: c.req.param("attachmentId") }));
 });
 

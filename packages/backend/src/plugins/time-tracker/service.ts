@@ -101,6 +101,29 @@ export function createProject(input: ProjectInput): TtProject {
   return getProject(id) as TtProject;
 }
 
+/** Name used for a customer's job when no project name is given. */
+export const GENERAL_PROJECT_NAME = "General";
+
+/**
+ * The project for a job: [customerId]'s active project called [name]
+ * (case-insensitive), created if there is none. A blank name means the
+ * customer's "General" project. Open to every user so anyone can start work
+ * for a customer; returns null when the customer does not exist.
+ */
+export function resolveJobProject(customerId: string, name?: string | null): TtProject | null {
+  const db = getDb();
+  if (!db.query("SELECT id FROM customers WHERE id = ?").get(customerId)) return null;
+  const projectName = (name ?? "").trim().slice(0, 200) || GENERAL_PROJECT_NAME;
+  const existing = db
+    .query(
+      `SELECT * FROM tt_projects
+        WHERE customer_id = ? AND is_archived = 0 AND lower(name) = lower(?)
+        ORDER BY created_at LIMIT 1`,
+    )
+    .get(customerId, projectName) as TtProject | null;
+  return existing ?? createProject({ name: projectName, customer_id: customerId });
+}
+
 export function getProject(id: string): TtProject | null {
   const db = getDb();
   return (db.query("SELECT * FROM tt_projects WHERE id = ?").get(id) as TtProject) ?? null;
@@ -142,23 +165,28 @@ export interface EntryFilters {
   from?: string;
   to?: string;
   user_id?: string;
+  /** Include teammates' entries (shared jobs). */
+  team?: boolean;
 }
 
 export type TtTimeEntryWithProject = TtTimeEntry & {
   project_name: string;
-  /** Proof-of-work files on the entry (see attachments.ts). */
-  attachment_count: number;
+  customer_id: string | null;
+  /** Who logged it: display name, else username. */
+  user_name: string | null;
 };
 
 export function listEntries(actor: Actor, filters: EntryFilters = {}): TtTimeEntryWithProject[] {
   const db = getDb();
   const conditions: string[] = [];
   const params: (string | number)[] = [];
-  // Non-admins are hard-scoped to their own entries; admins may filter by user.
-  if (!actor.isAdmin) {
+  // Non-admins see their own entries, or with `team` everyone's (read only:
+  // changes stay owner-or-admin in updateEntry/deleteEntry). Admins may
+  // filter by user.
+  if (!actor.isAdmin && !filters.team) {
     conditions.push("e.user_id = ?");
     params.push(actor.userId);
-  } else if (filters.user_id) {
+  } else if (actor.isAdmin && filters.user_id) {
     conditions.push("e.user_id = ?");
     params.push(filters.user_id);
   }
@@ -181,10 +209,11 @@ export function listEntries(actor: Actor, filters: EntryFilters = {}): TtTimeEnt
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   return db
     .query(
-      `SELECT e.*, p.name as project_name,
-              (SELECT COUNT(*) FROM tt_entry_attachments a WHERE a.entry_id = e.id)
-                AS attachment_count
-         FROM tt_time_entries e JOIN tt_projects p ON e.project_id = p.id
+      `SELECT e.*, p.name as project_name, p.customer_id,
+              COALESCE(NULLIF(u.display_name, ''), u.username) AS user_name
+         FROM tt_time_entries e
+         JOIN tt_projects p ON e.project_id = p.id
+         LEFT JOIN users u ON u.id = e.user_id
          ${where}
          ORDER BY e.started_at DESC`,
     )
