@@ -144,7 +144,11 @@ export interface EntryFilters {
   user_id?: string;
 }
 
-export type TtTimeEntryWithProject = TtTimeEntry & { project_name: string };
+export type TtTimeEntryWithProject = TtTimeEntry & {
+  project_name: string;
+  /** Proof-of-work files on the entry (see attachments.ts). */
+  attachment_count: number;
+};
 
 export function listEntries(actor: Actor, filters: EntryFilters = {}): TtTimeEntryWithProject[] {
   const db = getDb();
@@ -177,7 +181,9 @@ export function listEntries(actor: Actor, filters: EntryFilters = {}): TtTimeEnt
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   return db
     .query(
-      `SELECT e.*, p.name as project_name
+      `SELECT e.*, p.name as project_name,
+              (SELECT COUNT(*) FROM tt_entry_attachments a WHERE a.entry_id = e.id)
+                AS attachment_count
          FROM tt_time_entries e JOIN tt_projects p ON e.project_id = p.id
          ${where}
          ORDER BY e.started_at DESC`,

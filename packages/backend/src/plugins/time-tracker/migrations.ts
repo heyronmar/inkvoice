@@ -45,4 +45,26 @@ export const timeTrackerMigrations: PluginMigration[] = [
       `);
     },
   },
+  {
+    version: 2,
+    name: "time_entry_attachments",
+    up: (db) => {
+      // Proof of work on a time entry: photos or PDFs, stored as BLOBs like
+      // expense receipts. Removed with their entry.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS tt_entry_attachments (
+          id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+          entry_id TEXT NOT NULL REFERENCES tt_time_entries(id) ON DELETE CASCADE,
+          file_name TEXT NOT NULL,
+          content_type TEXT NOT NULL,
+          size INTEGER NOT NULL,
+          content BLOB NOT NULL,
+          user_id TEXT NOT NULL,
+          created_at TEXT DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_tt_attachments_entry ON tt_entry_attachments(entry_id);
+      `);
+    },
+  },
 ];
